@@ -3,6 +3,7 @@ import { redisConnection } from '../config/redis.js';
 import { Assignment } from '../models/Assignment.js';
 import { Upload } from '../models/Upload.js';
 import { emitToRoom } from '../socket.js';
+import { generateAssessmentPaper } from '../services/aiService.js';
 
 const extractTextFromUpload = async (upload) => {
   if (!upload) return '';
@@ -17,7 +18,7 @@ const extractTextFromUpload = async (upload) => {
       const parsedData = await pdfParse(upload.data);
       return parsedData.text;
     } catch (err) {
-      console.warn('PDF parsing fell back to string coercion due to an import error:', err.message);
+      console.warn('PDF parsing fell back to string coercion:', err.message);
       return upload.data.toString('binary').replace(/[\x00-\x1f\x7f-\xff]/g, ' ');
     }
   }
@@ -40,11 +41,11 @@ export const startWorker = () => {
       try {
         assignment.status = 'PROCESSING';
         await assignment.save();
-        emitToRoom(assignmentId, 'status:update', { status: 'PROCESSING', progress: 20 });
+        emitToRoom(assignmentId, 'status:update', { status: 'PROCESSING', progress: 15 });
 
         let sourceText = '';
         if (assignment.fileId) {
-          emitToRoom(assignmentId, 'status:update', { status: 'PARSING_FILE', progress: 40 });
+          emitToRoom(assignmentId, 'status:update', { status: 'PARSING_FILE', progress: 35 });
           const upload = await Upload.findById(assignment.fileId);
           if (upload) {
             sourceText = await extractTextFromUpload(upload);
@@ -52,57 +53,27 @@ export const startWorker = () => {
         }
 
         emitToRoom(assignmentId, 'status:update', { status: 'GENERATING_PAPER', progress: 60 });
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-
-        const mockGeneratedPaper = {
-          title: "Mumbai High School",
-          subject: "Science",
-          class: "Class 8th",
-          timeAllowed: "45 minutes",
-          maxMarks: assignment.totalMarks || 20,
-          sections: [
-            {
-              sectionName: "Section A",
-              instruction: "Attempt all questions. Each question carries 2 marks.",
-              questions: [
-                {
-                  questionNumber: 1,
-                  questionText: "Define electroplating. Explain its purpose in consumer products.",
-                  difficulty: "Easy",
-                  marks: 2
-                },
-                {
-                  questionNumber: 2,
-                  questionText: "What is the role of a conductor in the process of electrolysis?",
-                  difficulty: "Moderate",
-                  marks: 2
-                }
-              ]
-            }
-          ],
-          answerKey: [
-            {
-              questionNumber: 1,
-              answer: "Electroplating is the process of depositing a thin layer of metal onto a surface using electrolysis."
-            },
-            {
-              questionNumber: 2,
-              answer: "A conductor allows the electric current to flow through the electrolyte, driving chemical changes."
-            }
-          ]
-        };
+        
+        const generatedPaper = await generateAssessmentPaper({
+          configs: assignment.configs,
+          totalQuestions: assignment.totalQuestions,
+          totalMarks: assignment.totalMarks,
+          additionalInstructions: assignment.additionalInstructions,
+          sourceText: sourceText || null
+        });
 
         assignment.status = 'COMPLETED';
-        assignment.generatedPaper = mockGeneratedPaper;
+        assignment.generatedPaper = generatedPaper;
+        assignment.errorMessage = null;
         await assignment.save();
 
         emitToRoom(assignmentId, 'status:update', { 
           status: 'COMPLETED', 
           progress: 100,
-          paper: mockGeneratedPaper 
+          paper: generatedPaper 
         });
 
-        console.log(`Task ${assignmentId} successfully processed.`);
+        console.log(`Task ${assignmentId} successfully processed by Mistral AI.`);
         return { success: true };
 
       } catch (err) {
