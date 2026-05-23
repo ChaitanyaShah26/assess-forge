@@ -126,4 +126,39 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.post('/parse-preview', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded.' });
+  }
+
+  try {
+    let extractedText = '';
+
+    if (req.file.mimetype === 'text/plain') {
+      extractedText = req.file.buffer.toString('utf-8');
+    } else if (req.file.mimetype === 'application/pdf') {
+      try {
+        const pdfParse = (await import('pdf-parse')).default;
+        const parsedData = await pdfParse(req.file.buffer);
+        extractedText = parsedData.text;
+      } catch (pdfErr) {
+        console.error('Internal PDF parser failure:', pdfErr);
+        return res.status(500).json({ error: 'Failed to extract text from PDF document.' });
+      }
+    } else {
+      extractedText = req.file.buffer.toString('utf-8');
+    }
+
+    return res.json({
+      success: true,
+      filename: req.file.originalname,
+      extractedText: extractedText
+    });
+
+  } catch (error) {
+    console.error('Error parsing file preview:', error);
+    return res.status(500).json({ error: 'Internal server parser error.' });
+  }
+});
+
 export default router;
