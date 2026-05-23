@@ -1,10 +1,47 @@
 import { Worker } from 'bullmq';
+import { createRequire } from 'module';
 import { redisConnection } from '../config/redis.js';
 import { Assignment } from '../models/Assignment.js';
 import { Upload } from '../models/Upload.js';
 import { emitToRoom } from '../socket.js';
 import { generateAssessmentPaper } from '../services/aiService.js';
 
+const require = createRequire(import.meta.url);
+const pdfModule = require('pdf-parse'); // Dynamic loader
+
+/**
+ * Universal PDF Text Extractor Helper.
+ * Handles both v1 (function) and v2 (PDFParse class) variants seamlessly.
+ */
+const parsePDFBuffer = async (buffer) => {
+  // Case 1: Standard legacy v1 function export (CJS direct function)
+  if (typeof pdfModule === 'function') {
+    const data = await pdfModule(buffer);
+    return data.text;
+  }
+  
+  // Case 2: ES Module wrapped v1 function (default function export)
+  if (pdfModule && typeof pdfModule.default === 'function') {
+    const data = await pdfModule.default(buffer);
+    return data.text;
+  }
+  
+  // Case 3: Modern v2 TypeScript/ESM export class (PDFParse)
+  if (pdfModule && typeof pdfModule.PDFParse === 'function') {
+    const parser = new pdfModule.PDFParse({ data: buffer });
+    const result = await parser.getText();
+    if (typeof parser.destroy === 'function') {
+      await parser.destroy(); // Releases memory streams
+    }
+    return result.text;
+  }
+
+  throw new Error('Unsupported pdf-parse library structure or version.');
+};
+
+/**
+ * Resilient helper to parse text from either TXT buffers or PDFs
+ */
 const extractTextFromUpload = async (upload) => {
   if (!upload) return '';
   
@@ -14,11 +51,9 @@ const extractTextFromUpload = async (upload) => {
   
   if (upload.mimetype === 'application/pdf') {
     try {
-      const pdfParse = (await import('pdf-parse')).default;
-      const parsedData = await pdfParse(upload.data);
-      return parsedData.text;
+      return await parsePDFBuffer(upload.data);
     } catch (err) {
-      console.warn('PDF parsing fell back to string coercion:', err.message);
+      console.warn('PDF parsing fell back to string coercion due to an error:', err.message);
       return upload.data.toString('binary').replace(/[\x00-\x1f\x7f-\xff]/g, ' ');
     }
   }
@@ -26,6 +61,9 @@ const extractTextFromUpload = async (upload) => {
   return upload.data.toString('utf-8');
 };
 
+/**
+ * Initiates the Worker Process
+ */
 export const startWorker = () => {
   const worker = new Worker(
     'assessment-queue',

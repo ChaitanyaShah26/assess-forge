@@ -9,8 +9,14 @@ if (!MISTRAL_API_KEY) {
   console.warn('WARNING: MISTRAL_API_KEY is missing. AI generation will fail until it is added.');
 }
 
-const cleanJSONString = (raw) => {
+/**
+ * Defensive string sanitizer to clean up LLM markdown blocks, trailing commas,
+ * and weird unescaped control characters before parsing.
+ */
+const sanitizeJSONString = (raw) => {
   let cleaned = raw.trim();
+  
+  // 1. Remove Markdown JSON code block wraps if present
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.substring(7);
   } else if (cleaned.startsWith('```')) {
@@ -19,9 +25,25 @@ const cleanJSONString = (raw) => {
   if (cleaned.endsWith('```')) {
     cleaned = cleaned.substring(0, cleaned.length - 3);
   }
-  return cleaned.trim();
+  cleaned = cleaned.trim();
+
+  // 2. Fix trailing commas in objects or arrays (common LLM syntax error)
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  // 3. Remove raw, unescaped control characters (such as tab spaces) inside strings
+  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F]/g, (match) => {
+    if (match === '\n') return '\\n';
+    if (match === '\r') return '\\r';
+    if (match === '\t') return '\\t';
+    return '';
+  });
+
+  return cleaned;
 };
 
+/**
+ * Queries Mistral AI to build a structured, syntactically valid question paper
+ */
 export const generateAssessmentPaper = async ({
   configs,
   totalQuestions,
@@ -37,23 +59,30 @@ export const generateAssessmentPaper = async ({
     `- Type: "${cfg.type}", count: ${cfg.count}, marks per question: ${cfg.marksPerQuestion}`
   ).join('\n');
 
+  // SYSTEM PROMPT: Enforces strict single-quote rules for inline text to protect JSON boundaries
   const systemPrompt = `You are an expert curriculum designer and academic evaluation builder.
-Your task is to generate a comprehensive, structured exam assessment paper based on provided configuration details and optional reference texts.
+Your task is to generate a comprehensive, structured exam assessment paper based on provided configurations.
 
-CRITICAL RULES:
+CRITICAL JSON SYNTAX RULES:
+1. You MUST return your output in strict JSON format matching the schema details.
+2. Under no circumstances should you write raw, unescaped double-quotes (") inside a JSON string value. If you need to quote a term or phrase inside a sentence (e.g., 'Mixture of Experts', 'MoE', 'DeepSeek-V2', or 'Knowledge Distillation'), you MUST use single quotes (') instead. This is non-negotiable.
+3. Make sure all paragraph breaks inside string values are properly escaped as '\\n'.
+4. Do not include trailing commas in your JSON structure.
+5. Do not write any conversational text before or after the JSON block.
+
+CORE EXAM RULES:
 1. You MUST generate exactly the requested number of questions of each type.
 2. The total sum of all questions across sections must equal exactly ${totalQuestions}.
 3. The total marks of all questions must sum up to exactly ${totalMarks}.
 4. Map each requested "question type" into its own logical section (e.g. Section A: Multiple Choice Questions, Section B: Short Questions, etc.).
 5. For difficulty, assign each question one of these strict values: "Easy", "Moderate", or "Challenging".
 6. If reference text is provided, you MUST construct the questions factually and strictly from that content alone.
-7. You MUST return your output in strict JSON format matching the schema details. Do not include extra conversational text outside the JSON block.
 
 REQUIRED SCHEMA SPECIFICATION:
 {
-  "title": "Mumbai High School",
-  "subject": "<Determine or infer the main subject, e.g. English, Science, Physics, Chemistry>",
-  "class": "<Infer the appropriate class level from text or instructions, default to Class 8th>",
+  "title": "Delhi Public School, Sector-4, Bokaro",
+  "subject": "<Determine or infer the main subject, e.g. English, Science, Computer Science>",
+  "class": "<Infer class level, default to Class 8th>",
   "timeAllowed": "45 minutes",
   "maxMarks": ${totalMarks},
   "sections": [
@@ -63,7 +92,7 @@ REQUIRED SCHEMA SPECIFICATION:
       "questions": [
         {
           "questionNumber": 1,
-          "questionText": "The question content string goes here.",
+          "questionText": "The question text goes here.",
           "difficulty": "Easy",
           "marks": 1
         }
@@ -87,7 +116,7 @@ REQUIRED SCHEMA SPECIFICATION:
 ### Question Allocation Details:
 ${configSummary}
 
-### Optional User Guidelines / Specific Chapters:
+### Optional User Guidelines:
 ${additionalInstructions || 'None provided.'}
 
 ### Uploaded Reference Source Material:
@@ -108,8 +137,8 @@ Generate and populate the output matching the schema rules completely. Ensure th
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        response_format: { type: 'json_object' }, 
-        temperature: 0.2 
+        response_format: { type: 'json_object' }, // Forces JSON Mode output
+        temperature: 0.1 // Lower temp for more deterministic, fact-driven outputs
       })
     });
 
@@ -120,15 +149,21 @@ Generate and populate the output matching the schema rules completely. Ensure th
 
     const data = await response.json();
     const rawContent = data.choices[0].message.content;
-    const cleanedContent = cleanJSONString(rawContent);
+    const cleanedContent = sanitizeJSONString(rawContent);
 
-    const parsedData = JSON.parse(cleanedContent);
+    try {
+      const parsedData = JSON.parse(cleanedContent);
 
-    if (!parsedData.sections || !parsedData.answerKey || !parsedData.title) {
-      throw new Error('LLM output parsed successfully but lacks required schema fields.');
+      // Validate root schema components are present
+      if (!parsedData.sections || !parsedData.answerKey || !parsedData.title) {
+        throw new Error('LLM output parsed successfully but lacks required schema fields.');
+      }
+
+      return parsedData;
+    } catch (parseError) {
+      console.error('JSON Parse failed on cleaned content. Raw text snippet:', rawContent.substring(0, 500));
+      throw parseError;
     }
-
-    return parsedData;
 
   } catch (error) {
     console.error('Error in aiService during parsing or API query:', error);
