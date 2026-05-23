@@ -1,26 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-heading: 'Bricolage Grotesque', sans-serif;
+  --font-sans: 'Inter', sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-brand-dark: #303030;
+  --color-brand-orange: #FF5623;
+  --color-brand-muted: rgba(94, 94, 94, 0.55);
+  --color-brand-muted-default: rgba(94, 94, 94, 0.8);
+  --color-brand-bg-dark: #5E5E5E;
+  --color-brand-line-grey: #DADADA;
+  --color-brand-btn-dark: #181818;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --shadow-sidebar: 0px 16px 48px rgba(0, 0, 0, 0.12), 0px 32px 48px rgba(0, 0, 0, 0.2);
+  --shadow-dropdown: 0px 16px 48px rgba(0, 0, 0, 0.2), 0px 32px 48px rgba(0, 0, 0, 0.05);
+  --shadow-mic: 0px 10.9091px 32.7273px rgba(0, 0, 0, 0.12), 0px 21.8182px 32.7273px rgba(0, 0, 0, 0.2);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', sans-serif;
+  color: #303030;
+  background: linear-gradient(180deg, #EEEEEE 0%, #DADADA 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* ==========================================
+   PIXEL-PERFECT WEB-TO-PRINT RESOLUTION
+   ========================================== */
+@page {
+  size: A4 portrait;
+  margin: 10mm; /* Standard academic printable margin bounds */
+}
+
+@media print {
+  /* Force browser to print exact colors, background shapes, borders, and shadows */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html, body {
+    background: none !important;
+    background-color: #FFFFFF !important;
+    color: #303030 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide interactive sidebars, headers, print controls, and svgs */
+  aside, 
+  header, 
+  .no-print, 
+  button, 
+  svg {
+    display: none !important;
+  }
+
+  /* 
+    Surgical parent reset.
+    Targets all structural parent layout divs (Next.js layout wrappers)
+    and strips out flexbox settings, sidebar paddings, and height constraints.
+    It completely bypasses .print-paper and its contents to preserve your exam styles.
+  */
+  main,
+  div:not(.print-paper):not(.print-paper *) {
+    display: block !important;
+    position: static !important;
+    float: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important; /* Eliminates scrollbar artifacts in print */
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    background: none !important;
+    background-color: transparent !important;
+  }
+
+  /* 
+    Isolate the printed sheet and center on A4 canvas.
+    Retains layout settings so student grids, metadata rows, and question text render correctly.
+  */
+  .print-paper {
+    background-color: #FFFFFF !important;
+    color: #303030 !important;
+    padding: 15mm !important; /* Perfect academic margins on A4 paper */
+    margin: 0 auto !important; /* Centers the paper on the page */
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 32px !important; /* Retains spacing between questions and sections */
+  }
+
+  /* Keep standard gray block highlights for metadata and student boxes */
+  .bg-zinc-50 {
+    background-color: #F6F6F6 !important;
+    border: 1.25px solid #DADADA !important;
+    border-radius: 16px !important;
+    padding: 24px !important;
+  }
+
+  .print-break-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  h2, h3 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
 }
