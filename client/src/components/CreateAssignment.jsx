@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAssessStore } from './../store/useAssessStore';
+import axios from 'axios';
 import { 
   Plus, 
   Minus, 
@@ -8,14 +9,23 @@ import {
   Mic, 
   Calendar, 
   ArrowLeft, 
-  ArrowRight 
+  ArrowRight,
+  FileText
 } from 'lucide-react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function CreateAssignment() {
   const { createAssignment, setView } = useAssessStore();
   const [dueDate, setDueDate] = useState('');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
+  
+  const [previewText, setPreviewText] = useState('');
+  const [isParsing, setIsParsing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  const recognitionRef = useRef(null);
 
   const [configs, setConfigs] = useState([
     { type: 'Multiple Choice Questions', count: 4, marksPerQuestion: 1 },
@@ -26,6 +36,96 @@ export default function CreateAssignment() {
 
   const totalQuestions = configs.reduce((sum, item) => sum + item.count, 0);
   const totalMarks = configs.reduce((sum, item) => sum + (item.count * item.marksPerQuestion), 0);
+
+  // File parsing effect
+  useEffect(() => {
+    if (!uploadedFile) {
+      setPreviewText('');
+      return;
+    }
+
+    const fetchFilePreview = async () => {
+      setIsParsing(true);
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+
+      try {
+        const res = await axios.post(`${API_BASE}/api/assignments/parse-preview`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res.data.success) {
+          setPreviewText(res.data.extractedText);
+        }
+      } catch (err) {
+        console.error('Preview parsing failed:', err);
+        setPreviewText('Unable to preview content. Proceeding anyway...');
+      } finally {
+        setIsParsing(false);
+      }
+    };
+
+    fetchFilePreview();
+  }, [uploadedFile]);
+
+  // Voice recognition speech input
+  const handleVoiceInput = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (err) {
+          console.warn('Recognition already closed:', err.message);
+        }
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice speech recognition is not supported in this browser version. Try Chrome or Edge.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      
+      recognition.continuous = false;
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setAdditionalInstructions((prev) => prev ? `${prev} ${transcript}` : transcript);
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error === 'aborted') {
+          console.log('Voice session ended cleanly.');
+        } else if (event.error === 'not-allowed') {
+          alert('Microphone access blocked. Please enable microphone permissions in your browser address bar.');
+        } else {
+          console.warn('Speech Recognition error:', event.error);
+        }
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+
+    } catch (error) {
+      console.error("Failed to initialize or start voice capture session:", error);
+      setIsListening(false);
+    }
+  };
 
   const updateCount = (index, delta) => {
     const updated = [...configs];
@@ -134,9 +234,34 @@ export default function CreateAssignment() {
               )}
             </div>
             <span className="text-xs lg:text-base text-zinc-500 font-medium text-center font-heading px-2">
-              Upload images or document coordinates of your preferred reference source material
+              Upload document coordinates of your preferred reference source material
             </span>
           </div>
+
+          {/* Extracted file previews */}
+          {uploadedFile && (
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-brand-line-grey flex flex-col gap-2 transition-all">
+              <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  <FileText className="w-4 h-4 text-brand-orange" />
+                  Source Text Preview Block
+                </span>
+                <span>{isParsing ? 'Parsing Content...' : 'Parsed successfully'}</span>
+              </div>
+              
+              {isParsing ? (
+                <div className="h-16 flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce"></div>
+                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+              ) : (
+                <div className="text-xs text-zinc-600 font-mono bg-white p-3 rounded-lg border border-gray-100 max-h-24 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  {previewText || 'No plain text found inside uploaded material.'}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <label className="text-base font-bold text-brand-dark font-heading">Due Date</label>
@@ -151,7 +276,6 @@ export default function CreateAssignment() {
             </div>
           </div>
 
-          {/* Stacks vertically on mobile/tablet screens */}
           <div className="flex flex-col lg:flex-row justify-between items-start gap-6 lg:gap-12">
             <div className="w-full flex-1 flex flex-col gap-4">
               <label className="text-base font-bold text-brand-dark font-heading">Question Type</label>
@@ -195,11 +319,12 @@ export default function CreateAssignment() {
             </div>
 
             <div className="w-full lg:w-auto flex gap-4 justify-between lg:justify-start">
+              {/* Question counts counters */}
               <div className="flex flex-col gap-4 items-center">
                 <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">No. of Questions</span>
                 <div className="flex flex-col gap-3">
                   {configs.map((cfg, index) => (
-                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3">
+                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
                       <button 
                         type="button"
                         onClick={() => updateCount(index, -1)}
@@ -207,7 +332,20 @@ export default function CreateAssignment() {
                       >
                         <Minus className="w-4 h-4 text-brand-line-grey" />
                       </button>
-                      <span className="font-heading text-sm lg:text-base font-semibold text-brand-dark">{cfg.count}</span>
+                      
+                      {/* Interactive Manual input fields */}
+                      <input 
+                        type="number"
+                        value={cfg.count}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          const updated = [...configs];
+                          updated[index].count = isNaN(val) ? 0 : Math.max(0, val);
+                          setConfigs(updated);
+                        }}
+                        className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+
                       <button 
                         type="button"
                         onClick={() => updateCount(index, 1)}
@@ -220,11 +358,12 @@ export default function CreateAssignment() {
                 </div>
               </div>
 
+              {/* Marks counters */}
               <div className="flex flex-col gap-4 items-center">
                 <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">Marks</span>
                 <div className="flex flex-col gap-3">
                   {configs.map((cfg, index) => (
-                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3">
+                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
                       <button 
                         type="button"
                         onClick={() => updateMarks(index, -1)}
@@ -232,7 +371,20 @@ export default function CreateAssignment() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <span className="font-heading text-sm lg:text-base font-semibold text-brand-dark">{cfg.marksPerQuestion}</span>
+                      
+                      {/* Interactive Manual input fields */}
+                      <input 
+                        type="number"
+                        value={cfg.marksPerQuestion}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          const updated = [...configs];
+                          updated[index].marksPerQuestion = isNaN(val) ? 0 : Math.max(0, val);
+                          setConfigs(updated);
+                        }}
+                        className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+
                       <button 
                         type="button"
                         onClick={() => updateMarks(index, 1)}
@@ -263,9 +415,17 @@ export default function CreateAssignment() {
                 className="w-full text-xs lg:text-sm text-zinc-500 bg-transparent focus:outline-none font-heading resize-none"
               />
               <div className="flex justify-end">
-                <div className="w-9 h-9 bg-zinc-100 hover:bg-zinc-200 rounded-full flex items-center justify-center cursor-pointer shadow-mic">
-                  <Mic className="w-4 h-4 text-brand-dark" />
-                </div>
+                <button
+                  type="button"
+                  onClick={handleVoiceInput}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-mic border transition-all duration-200 focus:outline-none ${
+                    isListening 
+                      ? 'bg-brand-orange text-white border-brand-orange animate-pulse scale-105' 
+                      : 'bg-zinc-100 text-brand-dark hover:bg-zinc-200 border-transparent'
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
