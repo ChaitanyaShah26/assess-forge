@@ -10,17 +10,34 @@ import {
   Calendar, 
   ArrowLeft, 
   ArrowRight,
-  FileText
+  FileText,
+  Clock
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function CreateAssignment() {
   const { createAssignment, setView } = useAssessStore();
+  
+  // New Global Header States
+  const [assignmentType, setAssignmentType] = useState('ASSIGNMENT'); // 'ASSIGNMENT' or 'EXAM'
+  const [academicYear, setAcademicYear] = useState(() => {
+    const currentYear = new Date().getFullYear();
+    return `${currentYear}-${currentYear + 1}`;
+  });
+  const [classLevel, setClassLevel] = useState('Class 12th');
+  const [subjectName, setSubjectName] = useState('Computer Science');
+
+  // Conditional Assignment Fields
+  const [assignmentTitle, setAssignmentTitle] = useState('Worksheet on Electricity');
   const [dueDate, setDueDate] = useState('');
+
+  // Conditional Exam Fields
+  const [examDate, setExamDate] = useState('');
+  const [examTiming, setExamTiming] = useState('09:00 AM - 12:00 PM');
+
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
-  
   const [previewText, setPreviewText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -37,7 +54,7 @@ export default function CreateAssignment() {
   const totalQuestions = configs.reduce((sum, item) => sum + item.count, 0);
   const totalMarks = configs.reduce((sum, item) => sum + (item.count * item.marksPerQuestion), 0);
 
-  // File parsing effect
+  // File parsing hook
   useEffect(() => {
     if (!uploadedFile) {
       setPreviewText('');
@@ -58,7 +75,7 @@ export default function CreateAssignment() {
         }
       } catch (err) {
         console.error('Preview parsing failed:', err);
-        setPreviewText('Unable to preview content. Proceeding anyway...');
+        setPreviewText('Unable to preview content.');
       } finally {
         setIsParsing(false);
       }
@@ -67,15 +84,11 @@ export default function CreateAssignment() {
     fetchFilePreview();
   }, [uploadedFile]);
 
-  // Voice recognition speech input
+  // Voice Speech Captures
   const handleVoiceInput = () => {
     if (isListening) {
       if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (err) {
-          console.warn('Recognition already closed:', err.message);
-        }
+        try { recognitionRef.current.stop(); } catch (e) {}
       }
       setIsListening(false);
       return;
@@ -83,46 +96,24 @@ export default function CreateAssignment() {
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice speech recognition is not supported in this browser version. Try Chrome or Edge.");
+      alert("Speech recognition is not supported in this browser.");
       return;
     }
 
     try {
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
-      
       recognition.continuous = false;
       recognition.lang = 'en-US';
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
+      recognition.onstart = () => setIsListening(true);
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         setAdditionalInstructions((prev) => prev ? `${prev} ${transcript}` : transcript);
       };
-
-      recognition.onerror = (event) => {
-        if (event.error === 'aborted') {
-          console.log('Voice session ended cleanly.');
-        } else if (event.error === 'not-allowed') {
-          alert('Microphone access blocked. Please enable microphone permissions in your browser address bar.');
-        } else {
-          console.warn('Speech Recognition error:', event.error);
-        }
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
       recognition.start();
-
-    } catch (error) {
-      console.error("Failed to initialize or start voice capture session:", error);
+    } catch (e) {
       setIsListening(false);
     }
   };
@@ -147,14 +138,6 @@ export default function CreateAssignment() {
     setConfigs(configs.filter((_, i) => i !== index));
   };
 
-  const handleDragOver = (e) => e.preventDefault();
-
-  const handleFileDrop = (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) setUploadedFile(file);
-  };
-
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) setUploadedFile(file);
@@ -162,14 +145,33 @@ export default function CreateAssignment() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!dueDate) return alert('Please specify the assignment due date.');
+    
+    // Conditionally validate inputs based on selection
+    if (assignmentType === 'ASSIGNMENT' && (!dueDate || !assignmentTitle)) {
+      return alert('Assignment Title and Due Date are required.');
+    }
+    if (assignmentType === 'EXAM' && (!examDate || !examTiming)) {
+      return alert('Exam Date and Exam Timings are required.');
+    }
 
     const formData = new FormData();
-    formData.append('dueDate', dueDate);
+    formData.append('assignmentType', assignmentType);
+    formData.append('academicYear', academicYear);
+    formData.append('classLevel', classLevel);
+    formData.append('subjectName', subjectName);
     formData.append('totalQuestions', totalQuestions);
     formData.append('totalMarks', totalMarks);
     formData.append('additionalInstructions', additionalInstructions);
     formData.append('configs', JSON.stringify(configs));
+
+    if (assignmentType === 'ASSIGNMENT') {
+      formData.append('assignmentTitle', assignmentTitle);
+      formData.append('dueDate', dueDate);
+    } else {
+      formData.append('examDate', examDate);
+      formData.append('examTiming', examTiming);
+    }
+
     if (uploadedFile) {
       formData.append('file', uploadedFile);
     }
@@ -179,6 +181,8 @@ export default function CreateAssignment() {
 
   return (
     <div className="w-full max-w-[810px] flex flex-col gap-6 select-none mx-auto bg-transparent relative px-2 lg:px-0">
+      
+      {/* Header section */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -197,16 +201,133 @@ export default function CreateAssignment() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white/50 rounded-[32px] p-4 lg:p-8 flex flex-col gap-8 shadow-sm border border-gray-50">
-        <div className="flex flex-col gap-2">
-          <h3 className="text-xl font-bold text-brand-dark font-heading">Assignment Details</h3>
-          <span className="text-sm text-brand-muted-default font-heading">Basic information about your assignment</span>
+        
+        {/* Toggle between ASSIGNMENT and EXAM PAPER */}
+        <div className="flex flex-col gap-3">
+          <label className="text-base font-bold text-brand-dark font-heading">Template Format</label>
+          <div className="flex items-center gap-2 bg-[#F0F0F0] p-1.5 rounded-full border border-gray-200 w-full sm:w-80">
+            <button
+              type="button"
+              onClick={() => setAssignmentType('ASSIGNMENT')}
+              className={`flex-1 h-9 rounded-full flex items-center justify-center gap-2 text-sm font-semibold transition-colors focus:outline-none ${
+                assignmentType === 'ASSIGNMENT' 
+                  ? 'bg-[#181818] text-white' 
+                  : 'text-zinc-500 hover:text-brand-dark'
+              }`}
+            >
+              Assignment
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignmentType('EXAM')}
+              className={`flex-1 h-9 rounded-full flex items-center justify-center gap-2 text-sm font-semibold transition-colors focus:outline-none ${
+                assignmentType === 'EXAM' 
+                  ? 'bg-[#181818] text-white' 
+                  : 'text-zinc-500 hover:text-brand-dark'
+              }`}
+            >
+              Exam Paper
+            </button>
+          </div>
         </div>
+
+        {/* Global Metadata Inputs Block */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold uppercase text-gray-500 font-heading">Academic Year</label>
+            <input 
+              type="text" 
+              value={academicYear} 
+              onChange={(e) => setAcademicYear(e.target.value)}
+              className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading bg-white focus:outline-none focus:border-brand-orange"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold uppercase text-gray-500 font-heading">Class</label>
+            <input 
+              type="text" 
+              value={classLevel} 
+              onChange={(e) => setClassLevel(e.target.value)}
+              className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading bg-white focus:outline-none focus:border-brand-orange"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold uppercase text-gray-500 font-heading">Subject</label>
+            <input 
+              type="text" 
+              value={subjectName} 
+              onChange={(e) => setSubjectName(e.target.value)}
+              className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading bg-white focus:outline-none focus:border-brand-orange"
+            />
+          </div>
+        </div>
+
+        {/* Conditional Inputs Block */}
+        {assignmentType === 'ASSIGNMENT' ? (
+          /* ASSIGNMENT CONDITIONAL FIELDS */
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase text-gray-500 font-heading">Assignment Title</label>
+              <input 
+                type="text" 
+                value={assignmentTitle} 
+                onChange={(e) => setAssignmentTitle(e.target.value)}
+                className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading bg-white focus:outline-none focus:border-brand-orange"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase text-gray-500 font-heading">Due Date</label>
+              <div className="relative w-full h-11 border border-brand-line-grey rounded-full px-4 flex items-center justify-between bg-white focus-within:border-brand-orange">
+                <input 
+                  type="date" 
+                  value={dueDate} 
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="flex-1 bg-transparent text-sm text-zinc-400 focus:outline-none font-heading font-medium"
+                />
+                <Calendar className="w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* EXAM CONDITIONAL FIELDS */
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase text-gray-500 font-heading">Exam Date</label>
+              <div className="relative w-full h-11 border border-brand-line-grey rounded-full px-4 flex items-center justify-between bg-white focus-within:border-brand-orange">
+                <input 
+                  type="date" 
+                  value={examDate} 
+                  onChange={(e) => setExamDate(e.target.value)}
+                  className="flex-1 bg-transparent text-sm text-zinc-400 focus:outline-none font-heading font-medium"
+                />
+                <Calendar className="w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase text-gray-500 font-heading">Exam Timing / Duration</label>
+              <div className="relative w-full h-11 border border-brand-line-grey rounded-full px-4 flex items-center justify-between bg-white focus-within:border-brand-orange">
+                <input 
+                  type="text" 
+                  value={examTiming} 
+                  onChange={(e) => setExamTiming(e.target.value)}
+                  placeholder="e.g. 09:00 AM - 12:00 PM"
+                  className="flex-1 bg-transparent text-sm text-brand-dark focus:outline-none font-heading font-medium"
+                />
+                <Clock className="w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div 
-              onDragOver={handleDragOver}
-              onDrop={handleFileDrop}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) setUploadedFile(file);
+              }}
               className="w-full h-[202px] bg-white border border-dashed border-brand-line-grey rounded-3xl flex flex-col justify-center items-center gap-4 cursor-pointer relative hover:bg-zinc-50 transition-colors"
             >
               <input 
@@ -238,7 +359,6 @@ export default function CreateAssignment() {
             </span>
           </div>
 
-          {/* Extracted file previews */}
           {uploadedFile && (
             <div className="bg-zinc-50 p-4 rounded-2xl border border-brand-line-grey flex flex-col gap-2 transition-all">
               <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wide">
@@ -248,7 +368,6 @@ export default function CreateAssignment() {
                 </span>
                 <span>{isParsing ? 'Parsing Content...' : 'Parsed successfully'}</span>
               </div>
-              
               {isParsing ? (
                 <div className="h-16 flex items-center justify-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce"></div>
@@ -262,19 +381,6 @@ export default function CreateAssignment() {
               )}
             </div>
           )}
-
-          <div className="flex flex-col gap-2">
-            <label className="text-base font-bold text-brand-dark font-heading">Due Date</label>
-            <div className="relative w-full h-11 border border-brand-line-grey rounded-full px-4 flex items-center justify-between bg-white">
-              <input 
-                type="date" 
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="flex-1 bg-transparent text-sm lg:text-base text-zinc-400 focus:outline-none font-heading font-medium"
-              />
-              <Calendar className="w-5 h-5 text-gray-400" />
-            </div>
-          </div>
 
           <div className="flex flex-col lg:flex-row justify-between items-start gap-6 lg:gap-12">
             <div className="w-full flex-1 flex flex-col gap-4">
@@ -319,7 +425,6 @@ export default function CreateAssignment() {
             </div>
 
             <div className="w-full lg:w-auto flex gap-4 justify-between lg:justify-start">
-              {/* Question counts counters */}
               <div className="flex flex-col gap-4 items-center">
                 <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">No. of Questions</span>
                 <div className="flex flex-col gap-3">
@@ -332,8 +437,6 @@ export default function CreateAssignment() {
                       >
                         <Minus className="w-4 h-4 text-brand-line-grey" />
                       </button>
-                      
-                      {/* Interactive Manual input fields */}
                       <input 
                         type="number"
                         value={cfg.count}
@@ -345,7 +448,6 @@ export default function CreateAssignment() {
                         }}
                         className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-
                       <button 
                         type="button"
                         onClick={() => updateCount(index, 1)}
@@ -358,7 +460,6 @@ export default function CreateAssignment() {
                 </div>
               </div>
 
-              {/* Marks counters */}
               <div className="flex flex-col gap-4 items-center">
                 <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">Marks</span>
                 <div className="flex flex-col gap-3">
@@ -371,8 +472,6 @@ export default function CreateAssignment() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      
-                      {/* Interactive Manual input fields */}
                       <input 
                         type="number"
                         value={cfg.marksPerQuestion}
@@ -384,7 +483,6 @@ export default function CreateAssignment() {
                         }}
                         className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-
                       <button 
                         type="button"
                         onClick={() => updateMarks(index, 1)}

@@ -7,37 +7,7 @@ import { emitToRoom } from '../socket.js';
 import { generateAssessmentPaper } from '../services/aiService.js';
 
 const require = createRequire(import.meta.url);
-const pdfModule = require('pdf-parse'); // Dynamic loader
-
-/**
- * Universal PDF Text Extractor Helper.
- * Handles both v1 (function) and v2 (PDFParse class) variants seamlessly.
- */
-const parsePDFBuffer = async (buffer) => {
-  // Case 1: Standard legacy v1 function export (CJS direct function)
-  if (typeof pdfModule === 'function') {
-    const data = await pdfModule(buffer);
-    return data.text;
-  }
-  
-  // Case 2: ES Module wrapped v1 function (default function export)
-  if (pdfModule && typeof pdfModule.default === 'function') {
-    const data = await pdfModule.default(buffer);
-    return data.text;
-  }
-  
-  // Case 3: Modern v2 TypeScript/ESM export class (PDFParse)
-  if (pdfModule && typeof pdfModule.PDFParse === 'function') {
-    const parser = new pdfModule.PDFParse({ data: buffer });
-    const result = await parser.getText();
-    if (typeof parser.destroy === 'function') {
-      await parser.destroy(); // Releases memory streams
-    }
-    return result.text;
-  }
-
-  throw new Error('Unsupported pdf-parse library structure or version.');
-};
+const pdf = require('pdf-parse');
 
 /**
  * Resilient helper to parse text from either TXT buffers or PDFs
@@ -51,7 +21,8 @@ const extractTextFromUpload = async (upload) => {
   
   if (upload.mimetype === 'application/pdf') {
     try {
-      return await parsePDFBuffer(upload.data);
+      const parsedData = await pdf(upload.data);
+      return parsedData.text;
     } catch (err) {
       console.warn('PDF parsing fell back to string coercion due to an error:', err.message);
       return upload.data.toString('binary').replace(/[\x00-\x1f\x7f-\xff]/g, ' ');
@@ -92,12 +63,23 @@ export const startWorker = () => {
 
         emitToRoom(assignmentId, 'status:update', { status: 'GENERATING_PAPER', progress: 60 });
         
+        // CRITICAL FIX: Pass all metadata fields to the AI Service
         const generatedPaper = await generateAssessmentPaper({
           configs: assignment.configs,
           totalQuestions: assignment.totalQuestions,
           totalMarks: assignment.totalMarks,
           additionalInstructions: assignment.additionalInstructions,
-          sourceText: sourceText || null
+          sourceText: sourceText || null,
+          
+          // Custom Metadata parameters
+          assignmentType: assignment.assignmentType,
+          academicYear: assignment.academicYear,
+          classLevel: assignment.classLevel,
+          subjectName: assignment.subjectName,
+          examDate: assignment.examDate,
+          examTiming: assignment.examTiming,
+          assignmentTitle: assignment.assignmentTitle,
+          dueDate: assignment.dueDate
         });
 
         assignment.status = 'COMPLETED';

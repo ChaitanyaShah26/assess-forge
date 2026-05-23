@@ -1,46 +1,35 @@
 import express from 'express';
+import multer from 'multer';
 import { createRequire } from 'module';
 import { Assignment } from '../models/Assignment.js';
 import { Upload } from '../models/Upload.js';
 import { addAssignmentJob } from '../queue/assessmentQueue.js';
 
 const router = express.Router();
-
 const require = createRequire(import.meta.url);
-const pdfModule = require('pdf-parse'); // Dynamic loader
+const pdf = require('pdf-parse');
 
-const storage = express.urlencoded({ extended: true }); // Standard multer memory storage fallback
-import multer from 'multer';
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024 // Strict 10MB limit
-  }
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-/**
- * Universal PDF Text Extractor Helper.
- * Handles both v1 (function) and v2 (PDFParse class) variants seamlessly.
- */
 const parsePDFBuffer = async (buffer) => {
-  // Case 1: Standard legacy v1 function export (CJS direct function)
   if (typeof pdfModule === 'function') {
     const data = await pdfModule(buffer);
     return data.text;
   }
   
-  // Case 2: ES Module wrapped v1 function (default function export)
   if (pdfModule && typeof pdfModule.default === 'function') {
     const data = await pdfModule.default(buffer);
     return data.text;
   }
   
-  // Case 3: Modern v2 TypeScript/ESM export class (PDFParse)
   if (pdfModule && typeof pdfModule.PDFParse === 'function') {
     const parser = new pdfModule.PDFParse({ data: buffer });
     const result = await parser.getText();
     if (typeof parser.destroy === 'function') {
-      await parser.destroy(); // Releases memory streams
+      await parser.destroy();
     }
     return result.text;
   }
@@ -48,9 +37,6 @@ const parsePDFBuffer = async (buffer) => {
   throw new Error('Unsupported pdf-parse library structure or version.');
 };
 
-/**
- * POST /api/assignments/parse-preview
- */
 router.post('/parse-preview', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
@@ -84,21 +70,32 @@ router.post('/parse-preview', upload.single('file'), async (req, res) => {
   }
 });
 
-/**
- * POST /api/assignments
- */
 router.post('/', upload.single('file'), async (req, res) => {
   try {
     const { 
-      dueDate, 
+      assignmentType,
+      academicYear,
+      classLevel,
+      subjectName,
+      assignmentTitle,
+      dueDate,
+      examDate,
+      examTiming,
       configs, 
       totalQuestions, 
       totalMarks, 
       additionalInstructions 
     } = req.body;
 
-    if (!dueDate || !totalQuestions || !totalMarks) {
-      return res.status(400).json({ error: 'Missing mandatory configuration values.' });
+    if (!assignmentType || !academicYear || !classLevel || !subjectName || !totalQuestions || !totalMarks) {
+      return res.status(400).json({ error: 'Missing global mandatory configuration parameters.' });
+    }
+
+    if (assignmentType === 'ASSIGNMENT' && (!dueDate || !assignmentTitle)) {
+      return res.status(400).json({ error: 'Due Date and Assignment Title are required for assignments.' });
+    }
+    if (assignmentType === 'EXAM' && (!examDate || !examTiming)) {
+      return res.status(400).json({ error: 'Exam Date and Exam Timings are required for exam papers.' });
     }
 
     let fileId = null;
@@ -125,8 +122,15 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     const assignment = new Assignment({
       status: 'PENDING',
+      assignmentType,
+      academicYear,
+      classLevel,
+      subjectName,
+      assignmentTitle: assignmentType === 'ASSIGNMENT' ? assignmentTitle : undefined,
+      dueDate: assignmentType === 'ASSIGNMENT' ? new Date(dueDate) : undefined,
+      examDate: assignmentType === 'EXAM' ? new Date(examDate) : undefined,
+      examTiming: assignmentType === 'EXAM' ? examTiming : undefined,
       fileId,
-      dueDate: new Date(dueDate),
       configs: parsedConfigs,
       totalQuestions: parseInt(totalQuestions, 10),
       totalMarks: parseInt(totalMarks, 10),
@@ -138,7 +142,6 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Assignment queued for generation.',
       assignmentId: savedAssignment._id,
       jobId: job.id
     });
@@ -149,9 +152,6 @@ router.post('/', upload.single('file'), async (req, res) => {
   }
 });
 
-/**
- * GET /api/assignments
- */
 router.get('/', async (req, res) => {
   try {
     const assignments = await Assignment.find()
@@ -165,9 +165,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-/**
- * GET /api/assignments/:id
- */
 router.get('/:id', async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id)
@@ -184,9 +181,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/**
- * DELETE /api/assignments/:id
- */
 router.delete('/:id', async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id);

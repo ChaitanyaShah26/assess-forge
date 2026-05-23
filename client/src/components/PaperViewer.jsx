@@ -18,6 +18,7 @@ export default function PaperViewer() {
   }
 
   const paper = currentAssignment.generatedPaper;
+  const isExam = currentAssignment.assignmentType === 'EXAM';
 
   const handlePrint = () => {
     setTimeout(() => {
@@ -31,12 +32,11 @@ export default function PaperViewer() {
 
   return (
     <div className="w-full max-w-[1100px] flex flex-col gap-6 relative select-none px-2 lg:px-0">
-      {/* Outer wrapper */}
+      {/* Outer container */}
       <div className="bg-brand-bg-dark rounded-[32px] p-3 sm:p-5 flex flex-col gap-6">
         
-        {/* Action control bar - stacks vertically on mobile */}
+        {/* Action control bar */}
         <div className="bg-[#181818]/80 backdrop-blur-md rounded-[32px] p-4 lg:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 no-print">
-          
           <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-full border border-zinc-800">
             <button
               onClick={() => setPrintCopyType('STUDENT')}
@@ -83,35 +83,47 @@ export default function PaperViewer() {
           </div>
         </div>
 
-        {/* White Exam Card - Uses fluid padding values for mobile viewports */}
+        {/* White Exam Card */}
         <div className="bg-white rounded-[32px] p-4 sm:p-12 flex flex-col gap-8 shadow-sidebar print-paper">
           
           <div className="flex flex-col items-center gap-1 pb-4 border-b-2 border-brand-dark text-center">
+            {/* Header: Displays school and Dynamic Titles */}
             <h1 className="text-xl lg:text-3xl font-extrabold tracking-wider text-brand-dark uppercase font-heading">
-              {paper.title}
+              Delhi Public School, Sector-4, Bokaro
             </h1>
             <div className="flex flex-col items-center gap-1 mt-1">
-              {printCopyType === 'TEACHER' ? (
-                <span className="text-sm lg:text-base font-bold text-brand-orange tracking-widest uppercase font-heading">
-                  Official Marking Scheme & Solutions Guide
-                </span>
-              ) : (
-                <span className="text-xs lg:text-base font-semibold text-zinc-400 font-heading">
-                  Student Examination Paper
+              <span className="text-sm lg:text-lg font-bold text-zinc-600 font-heading">
+                {isExam 
+                  ? `Annual Examination (${currentAssignment.academicYear})` 
+                  : `Assignment: ${currentAssignment.assignmentTitle}`
+                }
+              </span>
+              {printCopyType === 'TEACHER' && (
+                <span className="text-sm lg:text-base font-bold text-brand-orange tracking-widest uppercase font-heading mt-1">
+                  — Official Marking Scheme & Solutions Guide —
                 </span>
               )}
               <div className="flex gap-3 mt-1.5 text-xs lg:text-sm text-zinc-500 font-semibold">
-                <span>Subject: {paper.subject}</span>
+                <span>Subject: {currentAssignment.subjectName}</span>
                 <span>•</span>
-                <span>{paper.class || 'Class 12th'}</span>
+                <span>Class: {currentAssignment.classLevel}</span>
               </div>
             </div>
           </div>
 
           {printCopyType === 'STUDENT' ? (
             <div className="flex flex-col gap-8">
+              {/* Dynamic Metadata Panel */}
               <div className="flex justify-between items-center bg-zinc-50 px-4 py-3 rounded-2xl border border-gray-100 print-break-avoid text-xs sm:text-base">
-                <span className="font-semibold text-brand-dark font-sans">Time Allowed: {paper.timeAllowed}</span>
+                {isExam ? (
+                  <span className="font-semibold text-brand-dark font-sans">
+                    Exam Timings: {currentAssignment.examTiming} (Date: {new Date(currentAssignment.examDate).toLocaleDateString('en-GB')})
+                  </span>
+                ) : (
+                  <span className="font-semibold text-brand-dark font-sans">
+                    Due Date: {new Date(currentAssignment.dueDate).toLocaleDateString('en-GB')}
+                  </span>
+                )}
                 <span className="font-semibold text-brand-dark font-sans">Maximum Marks: {paper.maxMarks}</span>
               </div>
 
@@ -119,6 +131,7 @@ export default function PaperViewer() {
                 All questions are compulsory unless stated otherwise.
               </p>
 
+              {/* Student detail blanks */}
               <div className="flex flex-col gap-2 bg-zinc-50 p-4 rounded-2xl border border-gray-100 font-sans font-semibold text-xs sm:text-base print-break-avoid">
                 <div className="flex items-center gap-1">
                   <span>Name:</span>
@@ -129,11 +142,12 @@ export default function PaperViewer() {
                   <div className="flex-1 border-b border-dashed border-gray-400 h-5"></div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span>Class: {paper.class || 'Class 12th'} Section:</span>
+                  <span>Class: {currentAssignment.classLevel} Section:</span>
                   <div className="flex-1 border-b border-dashed border-gray-400 h-5"></div>
                 </div>
               </div>
 
+              {/* Question list */}
               {paper.sections.map((sec, secIdx) => (
                 <div key={secIdx} className="flex flex-col gap-6 mt-4">
                   <div className="flex flex-col gap-1 border-b border-zinc-200 pb-2">
@@ -170,6 +184,7 @@ export default function PaperViewer() {
               </div>
             </div>
           ) : (
+            /* Render clean, dedicated ANSWER KEY COPY */
             <div className="flex flex-col gap-8">
               {paper.answerKey && paper.answerKey.length > 0 ? (
                 <div className="flex flex-col gap-8">

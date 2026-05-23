@@ -10,8 +10,8 @@ if (!MISTRAL_API_KEY) {
 }
 
 /**
- * Defensive string sanitizer to clean up LLM markdown blocks, trailing commas,
- * and weird unescaped control characters before parsing.
+ * Defensive string sanitizer to clean up LLM markdown blocks and trailing commas.
+ * Structural newlines are kept intact to prevent JSON corruption.
  */
 const sanitizeJSONString = (raw) => {
   let cleaned = raw.trim();
@@ -30,27 +30,29 @@ const sanitizeJSONString = (raw) => {
   // 2. Fix trailing commas in objects or arrays (common LLM syntax error)
   cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
 
-  // 3. Remove raw, unescaped control characters (such as tab spaces) inside strings
-  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F]/g, (match) => {
-    if (match === '\n') return '\\n';
-    if (match === '\r') return '\\r';
-    if (match === '\t') return '\\t';
-    return '';
-  });
-
   return cleaned;
 };
 
 /**
  * Queries Mistral AI to build a structured, syntactically valid question paper
  */
-export const generateAssessmentPaper = async ({
-  configs,
-  totalQuestions,
-  totalMarks,
-  additionalInstructions,
-  sourceText
-}) => {
+export const generateAssessmentPaper = async (params) => {
+  const {
+    configs,
+    totalQuestions,
+    totalMarks,
+    additionalInstructions,
+    sourceText,
+    assignmentType,
+    academicYear,
+    classLevel,
+    subjectName,
+    examTiming,
+    examDate,
+    assignmentTitle,
+    dueDate
+  } = params;
+
   if (!MISTRAL_API_KEY) {
     throw new Error('Mistral API Key is missing on the server config.');
   }
@@ -58,6 +60,15 @@ export const generateAssessmentPaper = async ({
   const configSummary = configs.map(cfg => 
     `- Type: "${cfg.type}", count: ${cfg.count}, marks per question: ${cfg.marksPerQuestion}`
   ).join('\n');
+
+  const dateFormatted = examDate ? new Date(examDate).toLocaleDateString('en-GB') : '';
+  const dueFormatted = dueDate ? new Date(dueDate).toLocaleDateString('en-GB') : '';
+
+  const documentHeaderRule = assignmentType === 'EXAM'
+    ? `You MUST format the "title" field exactly like this: "Delhi Public School, Sector-4, Bokaro\\nAnnual Examination (${academicYear})"
+       Set the "timeAllowed" field exactly to: "${examTiming} (Date: ${dateFormatted})"`
+    : `You MUST format the "title" field exactly like this: "Delhi Public School, Sector-4, Bokaro\\nAssignment: ${assignmentTitle}"
+       Set the "timeAllowed" field exactly to: "Due Date: ${dueFormatted}"`;
 
   // SYSTEM PROMPT: Enforces strict single-quote rules for inline text to protect JSON boundaries
   const systemPrompt = `You are an expert curriculum designer and academic evaluation builder.
@@ -81,9 +92,9 @@ CORE EXAM RULES:
 REQUIRED SCHEMA SPECIFICATION:
 {
   "title": "Delhi Public School, Sector-4, Bokaro",
-  "subject": "<Determine or infer the main subject, e.g. English, Science, Computer Science>",
-  "class": "<Infer class level, default to Class 8th>",
-  "timeAllowed": "45 minutes",
+  "subject": "${subjectName}",
+  "class": "${classLevel}",
+  "timeAllowed": "...",
   "maxMarks": ${totalMarks},
   "sections": [
     {
@@ -138,7 +149,8 @@ Generate and populate the output matching the schema rules completely. Ensure th
           { role: 'user', content: userPrompt }
         ],
         response_format: { type: 'json_object' }, // Forces JSON Mode output
-        temperature: 0.1 // Lower temp for more deterministic, fact-driven outputs
+        temperature: 0.1, // Lower temp for more deterministic, fact-driven outputs
+        max_tokens: 4000 // Allocates generous token limits to prevent truncation
       })
     });
 
