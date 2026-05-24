@@ -1,12 +1,34 @@
 import mongoose from 'mongoose';
 
 const questionSchema = new mongoose.Schema({
-  questionNumber: { type: Number, required: true },
-  questionText: { type: String, required: true },
-  difficulty: { type: String, enum: ['Easy', 'Moderate', 'Challenging'], required: true },
-  marks: { type: Number, required: true }
+  questionNumber: { 
+    type: Number, 
+    required: true 
+  },
+  questionText: { 
+    type: String, 
+    required: true 
+  },
+  difficulty: { 
+    type: String, 
+    enum: ['Easy', 'Moderate', 'Challenging'], 
+    required: true 
+  },
+  marks: { 
+    type: Number, 
+    required: true 
+  },
+  
+  options: [
+    { 
+      type: String 
+    }
+  ], 
+  
+  diagramSvg: { 
+    type: String 
+  } 
 });
-
 const sectionSchema = new mongoose.Schema({
   sectionName: { type: String, required: true },
   instruction: { type: String },

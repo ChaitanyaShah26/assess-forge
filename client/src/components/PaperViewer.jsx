@@ -32,10 +32,10 @@ export default function PaperViewer() {
 
   return (
     <div className="w-full max-w-[1100px] flex flex-col gap-6 relative select-none px-2 lg:px-0">
-      {/* Outer container */}
+      {/* Outer gray container */}
       <div className="bg-brand-bg-dark rounded-[32px] p-3 sm:p-5 flex flex-col gap-6">
         
-        {/* Action control bar */}
+        {/* Header action control bar */}
         <div className="bg-[#181818]/80 backdrop-blur-md rounded-[32px] p-4 lg:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-full border border-zinc-800">
             <button
@@ -87,7 +87,6 @@ export default function PaperViewer() {
         <div className="bg-white rounded-[32px] p-4 sm:p-12 flex flex-col gap-8 shadow-sidebar print-paper">
           
           <div className="flex flex-col items-center gap-1 pb-4 border-b-2 border-brand-dark text-center">
-            {/* Header: Displays school and Dynamic Titles */}
             <h1 className="text-xl lg:text-3xl font-extrabold tracking-wider text-brand-dark uppercase font-heading">
               Delhi Public School, Sector-4, Bokaro
             </h1>
@@ -113,7 +112,7 @@ export default function PaperViewer() {
 
           {printCopyType === 'STUDENT' ? (
             <div className="flex flex-col gap-8">
-              {/* Dynamic Metadata Panel */}
+              {/* Metadata Panel */}
               <div className="flex justify-between items-center bg-zinc-50 px-4 py-3 rounded-2xl border border-gray-100 print-break-avoid text-xs sm:text-base">
                 {isExam ? (
                   <span className="font-semibold text-brand-dark font-sans">
@@ -147,7 +146,7 @@ export default function PaperViewer() {
                 </div>
               </div>
 
-              {/* Question list */}
+              {/* Question list for Student Copy */}
               {paper.sections.map((sec, secIdx) => (
                 <div key={secIdx} className="flex flex-col gap-6 mt-4">
                   <div className="flex flex-col gap-1 border-b border-zinc-200 pb-2">
@@ -159,16 +158,39 @@ export default function PaperViewer() {
 
                   <div className="flex flex-col gap-6 pl-1 sm:pl-2">
                     {sec.questions.map((q, qIdx) => (
-                      <div key={qIdx} className="flex items-start justify-between gap-4 p-2 sm:p-4 rounded-xl hover:bg-zinc-50 transition-colors print-break-avoid">
-                        <div className="flex gap-3">
-                          <span className="font-bold text-brand-dark text-sm sm:text-base">{q.questionNumber}.</span>
-                          <span className="text-sm sm:text-base font-medium text-brand-dark leading-relaxed">
-                            {q.questionText}
+                      <div key={qIdx} className="flex flex-col gap-4 p-2 sm:p-4 rounded-xl hover:bg-zinc-50/50 transition-colors print-break-avoid">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex gap-3">
+                            <span className="font-bold text-brand-dark text-sm sm:text-base">{q.questionNumber}.</span>
+                            <span className="text-sm sm:text-base font-semibold text-brand-dark leading-relaxed">
+                              {q.questionText}
+                            </span>
+                          </div>
+                          <span className="font-bold text-brand-orange text-xs sm:text-sm whitespace-nowrap">
+                            [{q.marks} Marks]
                           </span>
                         </div>
-                        <span className="font-bold text-brand-orange text-xs sm:text-sm whitespace-nowrap">
-                          [{q.marks} Marks]
-                        </span>
+
+                        {/* Renders MCQ Options in a beautiful structured grid */}
+                        {q.options && q.options.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6 mt-2">
+                            {q.options.map((opt, optIdx) => (
+                              <div key={optIdx} className="bg-zinc-50 border border-zinc-200/60 px-4 py-2.5 rounded-xl text-xs sm:text-sm text-brand-dark font-medium leading-none flex items-center shadow-sm select-none hover:bg-zinc-100/50 transition-colors">
+                                {opt}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Renders crisp, responsive inline SVG vector diagrams if present */}
+                        {q.diagramSvg && (
+                          <div className="my-4 p-4 bg-zinc-50/30 border border-brand-line-grey rounded-2xl max-w-md mx-auto flex justify-center items-center print-break-avoid overflow-hidden shadow-inner">
+                            <div 
+                              className="w-full h-auto flex justify-center select-none"
+                              dangerouslySetInnerHTML={{ __html: q.diagramSvg }} 
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -184,7 +206,7 @@ export default function PaperViewer() {
               </div>
             </div>
           ) : (
-            /* Render clean, dedicated ANSWER KEY COPY */
+            /* Render clean, dedicated ANSWER KEY COPY (Teacher Mode) */
             <div className="flex flex-col gap-8">
               {paper.answerKey && paper.answerKey.length > 0 ? (
                 <div className="flex flex-col gap-8">
@@ -192,6 +214,8 @@ export default function PaperViewer() {
                     let matchedQuestion = '';
                     let matchedDifficulty = 'Easy';
                     let matchedMarks = 1;
+                    let matchedOptions = [];
+                    let matchedDiagram = '';
                     
                     for (const sec of paper.sections) {
                       const found = sec.questions.find(q => q.questionNumber === ans.questionNumber);
@@ -199,6 +223,8 @@ export default function PaperViewer() {
                         matchedQuestion = found.questionText;
                         matchedDifficulty = found.difficulty || 'Easy';
                         matchedMarks = found.marks || 1;
+                        matchedOptions = found.options || [];
+                        matchedDiagram = found.diagramSvg || '';
                         break;
                       }
                     }
@@ -221,9 +247,31 @@ export default function PaperViewer() {
                               <span className="text-xs font-bold text-zinc-500">[{matchedMarks} Marks]</span>
                             </div>
                           </div>
+                          
                           <p className="text-sm sm:text-base font-semibold text-brand-dark leading-relaxed mt-1">
-                            {matchedQuestion || 'Question metadata'}
+                            {matchedQuestion}
                           </p>
+
+                          {/* Options list also visible on teacher keys */}
+                          {matchedOptions && matchedOptions.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-w-xl">
+                              {matchedOptions.map((opt, optIdx) => (
+                                <div key={optIdx} className="bg-white/80 border border-zinc-200/60 px-3 py-1.5 rounded-lg text-xs text-zinc-600 font-medium">
+                                  {opt}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Diagrams visible on teacher keys as well */}
+                          {matchedDiagram && (
+                            <div className="my-2 p-2 bg-white/60 border border-brand-line-grey rounded-xl max-w-sm flex justify-center items-center">
+                              <div 
+                                className="w-full h-auto flex justify-center select-none scale-90"
+                                dangerouslySetInnerHTML={{ __html: matchedDiagram }} 
+                              />
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex flex-col gap-2 pl-3">

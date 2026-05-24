@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { jsonrepair } from 'jsonrepair';
 
 dotenv.config();
 
@@ -9,14 +10,8 @@ if (!MISTRAL_API_KEY) {
   console.warn('WARNING: MISTRAL_API_KEY is missing. AI generation will fail until it is added.');
 }
 
-/**
- * Defensive string sanitizer to clean up LLM markdown blocks and trailing commas.
- * Structural newlines are kept intact to prevent JSON corruption.
- */
 const sanitizeJSONString = (raw) => {
   let cleaned = raw.trim();
-  
-  // 1. Remove Markdown JSON code block wraps if present
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.substring(7);
   } else if (cleaned.startsWith('```')) {
@@ -26,16 +21,10 @@ const sanitizeJSONString = (raw) => {
     cleaned = cleaned.substring(0, cleaned.length - 3);
   }
   cleaned = cleaned.trim();
-
-  // 2. Fix trailing commas in objects or arrays (common LLM syntax error)
   cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
-
   return cleaned;
 };
 
-/**
- * Queries Mistral AI to build a structured, syntactically valid question paper
- */
 export const generateAssessmentPaper = async (params) => {
   const {
     configs,
@@ -70,16 +59,31 @@ export const generateAssessmentPaper = async (params) => {
     : `You MUST format the "title" field exactly like this: "Delhi Public School, Sector-4, Bokaro\\nAssignment: ${assignmentTitle}"
        Set the "timeAllowed" field exactly to: "Due Date: ${dueFormatted}"`;
 
-  // SYSTEM PROMPT: Enforces strict single-quote rules for inline text to protect JSON boundaries
   const systemPrompt = `You are an expert curriculum designer and academic evaluation builder.
 Your task is to generate a comprehensive, structured exam assessment paper based on provided configurations.
 
-CRITICAL JSON SYNTAX RULES:
+CRITICAL COMPACTNESS RULE:
+- Be concise. Keep your "questionText" and "answer" explanations brief, precise, and focused (under 2 sentences each). This is critical to ensure the output fits completely within the context constraints and avoids token truncation.
+
+CRITICAL JSON SYNTAX & HEADER RULES:
 1. You MUST return your output in strict JSON format matching the schema details.
-2. Under no circumstances should you write raw, unescaped double-quotes (") inside a JSON string value. If you need to quote a term or phrase inside a sentence (e.g., 'Mixture of Experts', 'MoE', 'DeepSeek-V2', or 'Knowledge Distillation'), you MUST use single quotes (') instead. This is non-negotiable.
-3. Make sure all paragraph breaks inside string values are properly escaped as '\\n'.
-4. Do not include trailing commas in your JSON structure.
-5. Do not write any conversational text before or after the JSON block.
+2. ${documentHeaderRule}
+3. Set the "subject" field to: "${subjectName}"
+4. Set the "class" field to: "${classLevel}"
+5. Under no circumstances should you write raw, unescaped double-quotes (") inside a JSON string value. If you need to quote a term inside a sentence, you MUST use single quotes (') instead.
+6. You MUST escape all backslashes as '\\\\' inside your string values (especially inside LaTeX formulas, math, or paths).
+7. Make sure all paragraph breaks inside string values are properly escaped as '\\n'.
+8. Do not include trailing commas in your JSON structure.
+9. Do not write any conversational text before or after the JSON block.
+
+CRITICAL MCQ & DIAGRAM FORMATTING RULES:
+1. If a section contains 'Multiple Choice Questions' (MCQs), each question object in that section MUST contain an 'options' array containing exactly 4 choices. Each option string inside the array MUST be prefixed with 'A) ', 'B) ', 'C) ', 'D) '.
+2. If a section contains 'Diagram/Graph-Based Questions' or 'Numerical Problems' that require visual context, you MUST generate a valid, responsive, well-formed inline SVG XML string representing that context, and set it under the 'diagramSvg' key of that question object.
+3. The SVG string MUST:
+   - Use 'viewBox="0 0 400 200" width="100%" height="150"' and be completely fluid.
+   - Be simple and lightweight to save tokens. Use stroke="#303030" or "black" for lines, circles, and borders, and fill="none".
+   - Contain clean, clear <text> labels in a standard sans-serif font for coordinates, electrical nodes, forces, or shapes.
+   - Be raw XML embedded inside the JSON string value. Do NOT write markdown tick blocks inside string values.
 
 CORE EXAM RULES:
 1. You MUST generate exactly the requested number of questions of each type.
@@ -87,7 +91,6 @@ CORE EXAM RULES:
 3. The total marks of all questions must sum up to exactly ${totalMarks}.
 4. Map each requested "question type" into its own logical section (e.g. Section A: Multiple Choice Questions, Section B: Short Questions, etc.).
 5. For difficulty, assign each question one of these strict values: "Easy", "Moderate", or "Challenging".
-6. If reference text is provided, you MUST construct the questions factually and strictly from that content alone.
 
 REQUIRED SCHEMA SPECIFICATION:
 {
@@ -99,13 +102,15 @@ REQUIRED SCHEMA SPECIFICATION:
   "sections": [
     {
       "sectionName": "Section A: Multiple Choice Questions",
-      "instruction": "Attempt all questions in this section.",
+      "instruction": "Attempt all questions in this section. Select the single best option.",
       "questions": [
         {
           "questionNumber": 1,
-          "questionText": "The question text goes here.",
+          "questionText": "What is the unit of electric current?",
           "difficulty": "Easy",
-          "marks": 1
+          "marks": 1,
+          "options": ["A) Volt", "B) Ohm", "C) Ampere", "D) Joule"],
+          "diagramSvg": ""
         }
       ]
     }
@@ -113,7 +118,7 @@ REQUIRED SCHEMA SPECIFICATION:
   "answerKey": [
     {
       "questionNumber": 1,
-      "answer": "Detailed correct explanation or answer string goes here."
+      "answer": "C) Ampere. The standard SI unit of electric current is the Ampere."
     }
   ]
 }`;
@@ -149,8 +154,8 @@ Generate and populate the output matching the schema rules completely. Ensure th
           { role: 'user', content: userPrompt }
         ],
         response_format: { type: 'json_object' }, // Forces JSON Mode output
-        temperature: 0.1, // Lower temp for more deterministic, fact-driven outputs
-        max_tokens: 4000 // Allocates generous token limits to prevent truncation
+        temperature: 0.1, // Lower temp for more deterministic outputs
+        max_tokens: 2500 // CRITICAL OPTIMIZATION: Keeps limits compatible with free-tier model context limits
       })
     });
 
@@ -164,16 +169,16 @@ Generate and populate the output matching the schema rules completely. Ensure th
     const cleanedContent = sanitizeJSONString(rawContent);
 
     try {
-      const parsedData = JSON.parse(cleanedContent);
+      const repairedContent = jsonrepair(cleanedContent);
+      const parsedData = JSON.parse(repairedContent);
 
-      // Validate root schema components are present
       if (!parsedData.sections || !parsedData.answerKey || !parsedData.title) {
         throw new Error('LLM output parsed successfully but lacks required schema fields.');
       }
 
       return parsedData;
     } catch (parseError) {
-      console.error('JSON Parse failed on cleaned content. Raw text snippet:', rawContent.substring(0, 500));
+      console.error('JSON Parse & Self-Repair failed. Raw text snippet:', rawContent.substring(0, 500));
       throw parseError;
     }
 
