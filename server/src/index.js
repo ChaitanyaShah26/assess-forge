@@ -6,6 +6,7 @@ import { connectDB } from './config/db.js';
 import { initSocket } from './socket.js';
 import { startWorker } from './queue/assessmentWorker.js';
 import assignmentRoutes from './routes/assignment.js';
+import classGroupRoutes from './routes/classGroup.js';
 
 dotenv.config();
 
@@ -35,6 +36,9 @@ startWorker();
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date() });
 });
+
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/class-groups', classGroupRoutes);
 
 server.listen(PORT, () => {
   console.log(` AssessForge Server Engine Live on Port: ${PORT}`);

@@ -3,6 +3,7 @@ import multer from 'multer';
 import { createRequire } from 'module';
 import { Assignment } from '../models/Assignment.js';
 import { Upload } from '../models/Upload.js';
+import { ClassGroup } from '../models/ClassGroup.js';
 import { addAssignmentJob } from '../queue/assessmentQueue.js';
 
 const router = express.Router();
@@ -36,6 +37,35 @@ const parsePDFBuffer = async (buffer) => {
 
   throw new Error('Unsupported pdf-parse library structure or version.');
 };
+
+
+router.get('/dashboard-metrics', async (req, res) => {
+  try {
+    const assignmentsCount = await Assignment.countDocuments({ assignmentType: 'ASSIGNMENT' });
+    const examsCount = await Assignment.countDocuments({ assignmentType: 'EXAM' });
+    const totalCreated = assignmentsCount + examsCount;
+
+    const groups = await ClassGroup.find();
+    const totalStudents = groups.reduce((sum, g) => sum + g.studentCount, 0);
+
+    const recentActivity = await Assignment.find()
+      .populate({ path: 'fileId', select: '-data' })
+      .sort({ createdAt: -1 })
+      .limit(4);
+
+    return res.json({
+      totalCreated,
+      assignmentsCount,
+      examsCount,
+      totalStudents,
+      totalGroups: groups.length,
+      recentActivity
+    });
+  } catch (error) {
+    console.error('Error generating aggregate dashboard metrics:', error);
+    return res.status(500).json({ error: 'Internal aggregation pipeline failure.' });
+  }
+});
 
 router.post('/parse-preview', upload.single('file'), async (req, res) => {
   if (!req.file) {
