@@ -149,34 +149,6 @@ export default function MyGroups() {
                 </label>
               </div>
 
-              {activeGroup.students.length === 0 ? (
-                <div className="text-center py-8 text-zinc-400 font-heading text-sm bg-zinc-50/50 rounded-2xl border border-dashed border-zinc-200">
-                  No students added. Upload a CSV file or add manually below.
-                </div>
-              ) : (
-                <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-zinc-50 border-b border-gray-100 text-zinc-400 font-heading uppercase tracking-wider h-10">
-                        <th className="pl-4">Roll No</th>
-                        <th>Student Name</th>
-                        <th className="pr-4">Email Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeGroup.students.map((student, idx) => (
-                        <tr key={idx} className="border-b border-gray-50 h-11 hover:bg-zinc-50/50">
-                          <td className="pl-4 font-bold text-zinc-500">{student.rollNo}</td>
-                          <td className="font-semibold text-brand-dark">{student.name}</td>
-                          <td className="pr-4 text-zinc-400 font-medium">{student.email}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Add manual student form */}
               <form onSubmit={handleAddSingleStudent} className="grid grid-cols-1 sm:grid-cols-4 gap-3 border-t border-gray-100 pt-4 mt-2">
                 <input 
                   type="text" 
@@ -203,6 +175,33 @@ export default function MyGroups() {
                   Add Student
                 </button>
               </form>
+
+              {activeGroup.students.length === 0 ? (
+                <div className="text-center py-8 text-zinc-400 font-heading text-sm bg-zinc-50/50 rounded-2xl border border-dashed border-zinc-200">
+                  No students added. Upload a CSV file or add manually below.
+                </div>
+              ) : (
+                <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-zinc-50 border-b border-gray-100 text-zinc-400 font-heading uppercase tracking-wider h-10">
+                        <th className="pl-4">Roll No</th>
+                        <th>Student Name</th>
+                        <th className="pr-4">Email Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeGroup.students.map((student, idx) => (
+                        <tr key={idx} className="border-b border-gray-50 h-11 hover:bg-zinc-50/50">
+                          <td className="pl-4 font-bold text-zinc-500">{student.rollNo}</td>
+                          <td className="font-semibold text-brand-dark">{student.name}</td>
+                          <td className="pr-4 text-zinc-400 font-medium">{student.email}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
 
