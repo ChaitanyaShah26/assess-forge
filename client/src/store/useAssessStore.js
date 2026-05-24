@@ -7,25 +7,46 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 export const useAssessStore = create((set, get) => ({
   assignments: [],
   groups: [],
-  metrics: { totalCreated: 0, assignmentsCount: 0, examsCount: 0, totalStudents: 0, totalGroups: 0, recentActivity: [] },
-  currentAssignment: null,
-  activeView: 'HOME',
+  metrics: { 
+    totalCreated: 0, 
+    assignmentsCount: 0, 
+    examsCount: 0, 
+    totalStudents: 0, 
+    totalGroups: 0, 
+    recentActivity: [] 
+  },
+  
+  currentAssignment: null, 
+  activeGroup: null,       
+  activeView: 'HOME',      
+  
   isGenerating: false,
   generationProgress: { status: 'PENDING', progress: 0, error: null },
   socket: null,
 
-  setView: (view) => set({ activeView: view }),
+  setView: (view) => set({ 
+    activeView: view, 
+    activeGroup: null 
+  }),
+
+  setDetailedAssignment: (assignment) => set({ 
+    currentAssignment: assignment, 
+    activeView: 'VIEW_PAPER' 
+  }),
+
+  inspectGroup: (group) => set({ 
+    activeGroup: group, 
+    activeView: 'GROUPS' 
+  }),
 
   fetchAssignments: async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/assignments`);
       set({ assignments: res.data });
     } catch (err) {
-      console.error('Error querying assignments:', err);
+      console.error('Failed to query assignments:', err);
     }
   },
-
-  setDetailedAssignment: (assignment) => set({ currentAssignment: assignment, activeView: 'VIEW_PAPER' }),
 
   deleteAssignment: async (id) => {
     try {
@@ -33,7 +54,7 @@ export const useAssessStore = create((set, get) => ({
       get().fetchAssignments();
       get().fetchMetrics(); 
     } catch (err) {
-      console.error('Error deleting assignment:', err);
+      console.error('Failed to delete assignment:', err);
     }
   },
 
@@ -42,7 +63,7 @@ export const useAssessStore = create((set, get) => ({
       const res = await axios.get(`${API_BASE}/api/assignments/dashboard-metrics`);
       set({ metrics: res.data });
     } catch (err) {
-      console.error('Failed to load dashboard metrics:', err);
+      console.error('Failed to query dashboard metrics:', err);
     }
   },
 
@@ -50,33 +71,71 @@ export const useAssessStore = create((set, get) => ({
     try {
       const res = await axios.get(`${API_BASE}/api/class-groups`);
       set({ groups: res.data });
+      
+      const activeId = get().activeGroup?._id;
+      if (activeId) {
+        const updatedGroup = res.data.find(g => g._id === activeId);
+        set({ activeGroup: updatedGroup });
+      }
     } catch (err) {
-      console.error('Failed to query groups:', err);
+      console.error('Failed to query class groups:', err);
     }
   },
 
   createGroup: async (groupData) => {
     try {
-      const res = await axios.post(`${API_BASE}/api/class-groups`, groupData);
-      set((state) => ({ groups: [res.data, ...state.groups] }));
+      await axios.post(`${API_BASE}/api/class-groups`, groupData);
+      get().fetchGroups();
       get().fetchMetrics(); 
     } catch (err) {
-      console.error('Failed to create classroom:', err);
+      console.error('Failed to create class group:', err);
     }
   },
 
-  dispatchPaper: async (groupId, paperId) => {
+  updateGroup: async (id, groupData) => {
     try {
-      await axios.post(`${API_BASE}/api/class-groups/${groupId}/assign`, { paperId });
+      await axios.put(`${API_BASE}/api/class-groups/${id}`, groupData);
+      get().fetchGroups();
+    } catch (err) {
+      console.error('Failed to update class group:', err);
+    }
+  },
+
+  deleteGroup: async (id) => {
+    try {
+      await axios.delete(`${API_BASE}/api/class-groups/${id}`);
+      get().fetchGroups();
+      get().fetchMetrics();
+    } catch (err) {
+      console.error('Failed to delete class group:', err);
+    }
+  },
+
+  addStudentsToGroup: async (groupId, studentsList) => {
+    try {
+      await axios.post(`${API_BASE}/api/class-groups/${groupId}/students`, { studentsList });
+      get().fetchGroups(); 
+    } catch (err) {
+      console.error('Failed to import student array:', err);
+    }
+  },
+
+  dispatchPaperToGroup: async (groupId, paperId) => {
+    try {
+      await axios.post(`${API_BASE}/api/class-groups/${groupId}/dispatch`, { paperId });
       get().fetchGroups(); 
     } catch (err) {
       console.error('Failed to dispatch paper:', err);
-      alert(err.response?.data?.error || 'Failed to dispatch paper.');
+      alert(err.response?.data?.error || 'Failed to dispatch paper to class.');
     }
   },
 
   createAssignment: async (formData) => {
-    set({ isGenerating: true, activeView: 'LIST', generationProgress: { status: 'ENQUEUED', progress: 5, error: null } });
+    set({ 
+      isGenerating: true, 
+      activeView: 'LIST', 
+      generationProgress: { status: 'ENQUEUED', progress: 5, error: null } 
+    });
 
     try {
       const res = await axios.post(`${API_BASE}/api/assignments`, formData, {
@@ -84,6 +143,7 @@ export const useAssessStore = create((set, get) => ({
       });
 
       const { assignmentId } = res.data;
+      
       const socketInstance = io(API_BASE);
       set({ socket: socketInstance });
 
@@ -93,25 +153,40 @@ export const useAssessStore = create((set, get) => ({
 
       socketInstance.on('status:update', (data) => {
         set({ 
-          generationProgress: { status: data.status, progress: data.progress || 0, error: data.error || null } 
+          generationProgress: { 
+            status: data.status, 
+            progress: data.progress || 0, 
+            error: data.error || null 
+          } 
         });
 
         if (data.status === 'COMPLETED') {
-          set({ isGenerating: false, activeView: 'VIEW_PAPER', currentAssignment: { _id: assignmentId, generatedPaper: data.paper } });
-          get().fetchAssignments();
-          get().fetchMetrics();
+          set({ 
+            isGenerating: false, 
+            activeView: 'VIEW_PAPER', 
+            currentAssignment: { _id: assignmentId, generatedPaper: data.paper } 
+          });
+          get().fetchAssignments(); 
+          get().fetchMetrics();     
           socketInstance.disconnect();
         }
 
         if (data.status === 'FAILED') {
-          set({ isGenerating: false, generationProgress: { status: 'FAILED', progress: 0, error: data.error } });
+          set({ 
+            isGenerating: false, 
+            generationProgress: { status: 'FAILED', progress: 0, error: data.error } 
+          });
           socketInstance.disconnect();
         }
       });
 
     } catch (err) {
-      console.error(err);
-      set({ isGenerating: false, generationProgress: { status: 'FAILED', progress: 0, error: 'Request aborted.' } });
+      console.error('Failed to initialize assessment creation request:', err);
+      const errorMsg = err.response?.data?.error || 'Request processing aborted.';
+      set({ 
+        isGenerating: false, 
+        generationProgress: { status: 'FAILED', progress: 0, error: errorMsg } 
+      });
     }
   }
 }));

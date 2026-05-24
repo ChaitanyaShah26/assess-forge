@@ -46,7 +46,11 @@ router.get('/dashboard-metrics', async (req, res) => {
     const totalCreated = assignmentsCount + examsCount;
 
     const groups = await ClassGroup.find();
-    const totalStudents = groups.reduce((sum, g) => sum + g.studentCount, 0);
+    
+    const totalStudents = groups.reduce((sum, g) => {
+      const count = g.students ? g.students.length : 0;
+      return sum + count;
+    }, 0);
 
     const recentActivity = await Assignment.find()
       .populate({ path: 'fileId', select: '-data' })
