@@ -9,16 +9,23 @@ import AssignmentList from '../components/AssignmentList';
 import CreateAssignment from '../components/CreateAssignment';
 import PaperViewer from '../components/PaperViewer';
 import MobileTabBar from '../components/MobileTabBar';
+import HomeDashboard from '../components/HomeDashboard';
+import MyGroups from '../components/MyGroups';
 
 export default function Home() {
-  const { activeView, isGenerating, generationProgress, fetchAssignments } = useAssessStore();
+  const { activeView, isGenerating, generationProgress, fetchAssignments, fetchGroups } = useAssessStore();
 
   useEffect(() => {
     fetchAssignments();
-  }, [fetchAssignments]);
+    fetchGroups();
+  }, [fetchAssignments, fetchGroups]);
 
   const renderMainContent = () => {
     switch (activeView) {
+      case 'HOME':
+        return <HomeDashboard />;
+      case 'GROUPS':
+        return <MyGroups />;
       case 'CREATE':
         return <CreateAssignment />;
       case 'VIEW_PAPER':
@@ -31,14 +38,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row relative overflow-x-hidden">
-      {/* Sidebar - Visible on Desktop, Hidden on Mobile */}
       <Sidebar />
 
-      {/* Main Content Wrapper - Shifts left-margin dynamically on larger viewports */}
       <main className="flex-1 min-h-screen w-full lg:pl-[344px] px-4 lg:pr-8 pt-4 lg:pt-6 pb-28 lg:pb-24 flex flex-col gap-6 items-center">
         <Header />
 
-        {/* WebSocket Progress Indicator */}
         {isGenerating && (
           <div className="w-full max-w-[1100px] bg-brand-btn-dark text-white p-4 rounded-2xl flex flex-col gap-2 shadow-sidebar">
             <div className="flex justify-between items-center text-sm font-semibold font-heading">
@@ -57,13 +61,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Central Fluid content boundary */}
         <div className="w-full max-w-[1100px] flex-1 flex flex-col items-center">
           {renderMainContent()}
         </div>
       </main>
 
-      {/* Bottom App Bar - Visible on Mobile, Hidden on Desktop */}
       <MobileTabBar />
     </div>
   );

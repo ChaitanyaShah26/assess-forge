@@ -24,14 +24,21 @@ export default function Sidebar() {
   return (
     <aside className="hidden lg:flex w-[304px] bg-white flex-col h-screen fixed left-0 top-0 justify-between py-6 px-6 select-none z-30 shadow-sidebar">
       <div className="flex flex-col gap-8">
+        
+        {/* Logo Frame */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[15px] bg-gradient-to-b from-[#E56820] to-[#D45E3E] flex items-center justify-center shadow-sm">
-            {/*<span className="text-white font-extrabold text-2xl font-heading">V</span>*/}
-            <img src="/logo.png"></img>
+          <div className="w-10 h-10 rounded-[15px] bg-gradient-to-b from-[#E56820] to-[#D45E3E] flex items-center justify-center shadow-sm overflow-hidden">
+            {/* Replaced 'V' span with logo.png from public folder */}
+            <img 
+              src="/logo.png" 
+              alt="VedaAI Logo" 
+              className="w-6 h-6 object-contain" 
+            />
           </div>
-          <span className="text-[28px] leading-[20px] font-bold tracking-tight text-[#303030] font-heading">VedaAI</span>
+          <span className="text-[28px] leading-[20px] font-bold tracking-tight text-brand-dark font-heading">VedaAI</span>
         </div>
 
+        {/* Create Assignment Button with Inset Box Shadow */}
         <button 
           onClick={() => setView('CREATE')}
           className="w-full h-[42px] bg-[#272727] shadow-[inset_0px_-1px_3.5px_rgba(177,177,177,0.6),inset_0px_0px_34.5px_rgba(255,255,255,0.25)] hover:bg-zinc-800 rounded-full flex items-center justify-center gap-2 transition-transform active:scale-95 text-white focus:outline-none"
@@ -40,17 +47,19 @@ export default function Sidebar() {
           <span className="text-white font-medium text-base font-sans tracking-wide">Create Assignment</span>
         </button>
 
+        {/* Navigation Items */}
         <nav className="flex flex-col gap-1.5">
           {navigationItems.map((item) => {
             const Icon = item.icon;
-            const isSelected = item.id === 'LIST' && (activeView === 'LIST' || activeView === 'CREATE' || activeView === 'VIEW_PAPER');
+            
+            // Evaluates active navigation matches
+            const isSelected = activeView === item.id || 
+                               (item.id === 'LIST' && activeView === 'VIEW_PAPER');
 
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  if (item.id === 'LIST') setView('LIST');
-                }}
+                onClick={() => setView(item.id)}
                 className={`flex items-center justify-between px-3 py-2.5 h-[40px] rounded-lg text-sm transition-colors focus:outline-none ${
                   isSelected 
                     ? 'bg-[#F0F0F0] text-brand-dark font-semibold' 

@@ -6,33 +6,91 @@ export default function Header() {
   const { activeView, setView } = useAssessStore();
 
   const handleBack = () => {
-    setView('LIST');
+    // Sub-views always return to the core listing grid
+    if (activeView === 'CREATE' || activeView === 'VIEW_PAPER') {
+      setView('LIST');
+    }
+  };
+
+  // The back button is hidden on root landing views and shown only on sub-action views
+  const showBackButton = activeView === 'CREATE' || activeView === 'VIEW_PAPER';
+
+  // Dynamically renders context-aware breadcrumbs matching the active scope
+  const renderBreadcrumbs = () => {
+    switch (activeView) {
+      case 'HOME':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            Dashboard
+          </span>
+        );
+      case 'GROUPS':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            My Groups
+          </span>
+        );
+      case 'LIST':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            Assignments
+          </span>
+        );
+      case 'CREATE':
+        return (
+          <div className="flex items-center gap-1.5 lg:gap-2">
+            <span 
+              onClick={() => setView('LIST')}
+              className="text-sm lg:text-base font-semibold text-zinc-400 font-heading tracking-tight cursor-pointer hover:text-brand-dark transition-colors"
+            >
+              Assignments
+            </span>
+            <span className="text-gray-300">/</span>
+            <span className="text-sm lg:text-base font-extrabold text-brand-dark font-heading tracking-tight">
+              Create New
+            </span>
+          </div>
+        );
+      case 'VIEW_PAPER':
+        return (
+          <div className="flex items-center gap-1.5 lg:gap-2">
+            <span 
+              onClick={() => setView('LIST')}
+              className="text-sm lg:text-base font-semibold text-zinc-400 font-heading tracking-tight cursor-pointer hover:text-brand-dark transition-colors"
+            >
+              Assignments
+            </span>
+            <span className="text-gray-300">/</span>
+            <span className="text-sm lg:text-base font-extrabold text-brand-dark font-heading tracking-tight">
+              Output Paper
+            </span>
+          </div>
+        );
+      default:
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            VedaAI Portal
+          </span>
+        );
+    }
   };
 
   return (
     <header className="w-full max-w-[1100px] h-14 bg-white/75 backdrop-blur-md rounded-2xl px-4 lg:px-6 py-2 flex items-center justify-between shadow-sm select-none border border-gray-100/50">
-      <div className="flex items-center gap-2 lg:gap-3">
-        <button 
-          onClick={handleBack}
-          className="w-9 h-9 lg:w-10 lg:h-10 bg-white rounded-full border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-colors focus:outline-none"
-        >
-          <ArrowLeft className="w-5 h-5 lg:w-6 lg:h-6 text-brand-dark" />
-        </button>
+      <div className="flex items-center gap-3">
+        {/* Conditional back arrow button container */}
+        {showBackButton && (
+          <button 
+            onClick={handleBack}
+            className="w-9 h-9 lg:w-10 lg:h-10 bg-white rounded-full border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-colors focus:outline-none"
+          >
+            <ArrowLeft className="w-5 h-5 lg:w-6 lg:h-6 text-brand-dark" />
+          </button>
+        )}
 
-        <div className="flex items-center gap-1.5 lg:gap-2">
-          <span className="text-sm lg:text-base font-semibold text-zinc-400 font-heading tracking-tight">Assignment</span>
-          {activeView === 'CREATE' && (
-            <>
-              <span className="text-gray-300">/</span>
-              <span className="text-sm lg:text-base font-semibold text-brand-dark font-heading tracking-tight">Create New</span>
-            </>
-          )}
-          {activeView === 'VIEW_PAPER' && (
-            <>
-              <span className="text-gray-300">/</span>
-              <span className="text-sm lg:text-base font-semibold text-brand-dark font-heading tracking-tight">Output Paper</span>
-            </>
-          )}
+        {/* Breadcrumbs node */}
+        <div className="flex items-center">
+          {renderBreadcrumbs()}
         </div>
       </div>
 
