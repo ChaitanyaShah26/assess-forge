@@ -26,7 +26,8 @@ export default function Sidebar() {
       <div className="flex flex-col gap-8">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-[15px] bg-gradient-to-b from-[#E56820] to-[#D45E3E] flex items-center justify-center shadow-sm">
-            <span className="text-white font-extrabold text-2xl font-heading">V</span>
+            {/*<span className="text-white font-extrabold text-2xl font-heading">V</span>*/}
+            <img src="/logo.png"></img>
           </div>
           <span className="text-[28px] leading-[20px] font-bold tracking-tight text-[#303030] font-heading">VedaAI</span>
         </div>
