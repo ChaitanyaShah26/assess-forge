@@ -1,9 +1,21 @@
 import React, { useEffect } from 'react';
 import { useAssessStore } from '../store/useAssessStore';
-import { FileText, Users, GraduationCap, Award, Calendar, ChevronRight } from 'lucide-react';
+import { FileText, Users, GraduationCap, ChevronRight } from 'lucide-react';
+
+/**
+ * Defensive String Renderer.
+ * Extract strings from nested objects to prevent React rendering crashes.
+ */
+const renderString = (val) => {
+  if (!val) return '';
+  if (typeof val === 'object') {
+    return val.name || val.title || val.subjectName || val.filename || '';
+  }
+  return String(val);
+};
 
 export default function HomeDashboard() {
-  const { metrics, fetchMetrics, setDetailedAssignment, setView } = useAssessStore();
+  const { metrics, fetchMetrics, setDetailedAssignment } = useAssessStore();
 
   useEffect(() => {
     fetchMetrics();
@@ -17,8 +29,6 @@ export default function HomeDashboard() {
 
   return (
     <div className="w-full max-w-[1100px] flex flex-col gap-8 select-none px-2 lg:px-0">
-      
-      {/* Title Segment */}
       <div>
         <h1 className="text-2xl font-extrabold text-brand-dark font-heading">Teacher's Control Panel</h1>
         <p className="text-sm text-brand-muted font-heading mt-0.5">Track your classroom evaluations and assessment creation statistics.</p>
@@ -47,13 +57,13 @@ export default function HomeDashboard() {
       <div className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-sm">
         <h3 className="text-lg font-bold text-brand-dark font-heading mb-6 border-b border-gray-100 pb-3">Recent Assessments Activity</h3>
         
-        {metrics.recentActivity.length === 0 ? (
-          <div className="text-center py-12 text-zinc-400 font-heading">
+        {(!metrics.recentActivity || metrics.recentActivity.length === 0) ? (
+          <div className="text-center py-12 text-zinc-400 font-heading text-sm">
             No assessments drafted yet. Let's create your first!
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {metrics.recentActivity.map((item, index) => {
+            {metrics.recentActivity.map((item) => {
               const assignedDate = new Date(item.createdAt).toLocaleDateString('en-GB');
               return (
                 <div 
@@ -67,7 +77,7 @@ export default function HomeDashboard() {
                     </div>
                     <div className="flex flex-col">
                       <span className="text-base font-bold text-brand-dark font-heading">
-                        {item.subjectName} — {item.classLevel}
+                        {renderString(item.subjectName)} — {renderString(item.classLevel)}
                       </span>
                       <span className="text-xs text-zinc-400 font-sans mt-0.5">
                         Generated on: {assignedDate} | {item.totalQuestions} Questions | {item.totalMarks} Marks

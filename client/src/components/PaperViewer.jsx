@@ -2,9 +2,21 @@ import React, { useState } from 'react';
 import { useAssessStore } from './../store/useAssessStore';
 import { Download, RefreshCw, FileText, CheckSquare } from 'lucide-react';
 
+/**
+ * Defensive String Renderer.
+ * Extract strings from nested objects to prevent React rendering crashes.
+ */
+const renderString = (val) => {
+  if (!val) return '';
+  if (typeof val === 'object') {
+    return val.name || val.title || val.subjectName || val.filename || '';
+  }
+  return String(val);
+};
+
 export default function PaperViewer() {
   const { currentAssignment, setView } = useAssessStore();
-  const [printCopyType, setPrintCopyType] = useState('STUDENT'); // 'STUDENT' or 'TEACHER'
+  const [printCopyType, setPrintCopyType] = useState('STUDENT');
 
   if (!currentAssignment || !currentAssignment.generatedPaper) {
     return (
@@ -32,7 +44,6 @@ export default function PaperViewer() {
 
   return (
     <div className="w-full max-w-[1100px] flex flex-col gap-6 relative select-none px-2 lg:px-0">
-      {/* Outer gray container */}
       <div className="bg-brand-bg-dark rounded-[32px] p-3 sm:p-5 flex flex-col gap-6">
         
         {/* Header action control bar */}
@@ -41,9 +52,7 @@ export default function PaperViewer() {
             <button
               onClick={() => setPrintCopyType('STUDENT')}
               className={`h-8 lg:h-9 px-3 lg:px-4 rounded-full flex items-center gap-1.5 text-xs lg:text-sm font-semibold transition-colors focus:outline-none ${
-                printCopyType === 'STUDENT' 
-                  ? 'bg-brand-orange text-white' 
-                  : 'text-zinc-400 hover:text-white'
+                printCopyType === 'STUDENT' ? 'bg-brand-orange text-white' : 'text-zinc-400 hover:text-white'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -52,9 +61,7 @@ export default function PaperViewer() {
             <button
               onClick={() => setPrintCopyType('TEACHER')}
               className={`h-8 lg:h-9 px-3 lg:px-4 rounded-full flex items-center gap-1.5 text-xs lg:text-sm font-semibold transition-colors focus:outline-none ${
-                printCopyType === 'TEACHER' 
-                  ? 'bg-brand-orange text-white' 
-                  : 'text-zinc-400 hover:text-white'
+                printCopyType === 'TEACHER' ? 'bg-brand-orange text-white' : 'text-zinc-400 hover:text-white'
               }`}
             >
               <CheckSquare className="w-3.5 h-3.5" />
@@ -91,10 +98,10 @@ export default function PaperViewer() {
               Delhi Public School, Sector-4, Bokaro
             </h1>
             <div className="flex flex-col items-center gap-1 mt-1">
-              <span className="text-sm lg:text-lg font-bold text-zinc-600 font-heading">
+              <span className="text-sm lg:text-lg font-bold text-brand-orange tracking-widest uppercase font-heading">
                 {isExam 
-                  ? `Annual Examination (${currentAssignment.academicYear})` 
-                  : `Assignment: ${currentAssignment.assignmentTitle}`
+                  ? `Annual Examination (${renderString(currentAssignment.academicYear)})` 
+                  : `Assignment: ${renderString(currentAssignment.assignmentTitle)}`
                 }
               </span>
               {printCopyType === 'TEACHER' && (
@@ -103,9 +110,9 @@ export default function PaperViewer() {
                 </span>
               )}
               <div className="flex gap-3 mt-1.5 text-xs lg:text-sm text-zinc-500 font-semibold">
-                <span>Subject: {currentAssignment.subjectName}</span>
+                <span>Subject: {renderString(currentAssignment.subjectName)}</span>
                 <span>•</span>
-                <span>Class: {currentAssignment.classLevel}</span>
+                <span>Class: {renderString(currentAssignment.classLevel)}</span>
               </div>
             </div>
           </div>
@@ -116,7 +123,7 @@ export default function PaperViewer() {
               <div className="flex justify-between items-center bg-zinc-50 px-4 py-3 rounded-2xl border border-gray-100 print-break-avoid text-xs sm:text-base">
                 {isExam ? (
                   <span className="font-semibold text-brand-dark font-sans">
-                    Exam Timings: {currentAssignment.examTiming} (Date: {new Date(currentAssignment.examDate).toLocaleDateString('en-GB')})
+                    Exam Timings: {renderString(currentAssignment.examTiming)} (Date: {new Date(currentAssignment.examDate).toLocaleDateString('en-GB')})
                   </span>
                 ) : (
                   <span className="font-semibold text-brand-dark font-sans">
@@ -141,18 +148,18 @@ export default function PaperViewer() {
                   <div className="flex-1 border-b border-dashed border-gray-400 h-5"></div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span>Class: {currentAssignment.classLevel} Section:</span>
+                  <span>Class: {renderString(currentAssignment.classLevel)} Section:</span>
                   <div className="flex-1 border-b border-dashed border-gray-400 h-5"></div>
                 </div>
               </div>
 
-              {/* Question list for Student Copy */}
+              {/* Question list */}
               {paper.sections.map((sec, secIdx) => (
                 <div key={secIdx} className="flex flex-col gap-6 mt-4">
                   <div className="flex flex-col gap-1 border-b border-zinc-200 pb-2">
-                    <h3 className="text-lg lg:text-2xl font-bold text-brand-orange font-heading">{sec.sectionName}</h3>
+                    <h3 className="text-lg lg:text-2xl font-bold text-brand-orange font-heading">{renderString(sec.sectionName)}</h3>
                     {sec.instruction && (
-                      <span className="text-xs lg:text-sm font-semibold text-brand-muted italic">{sec.instruction}</span>
+                      <span className="text-xs lg:text-sm font-semibold text-brand-muted italic">{renderString(sec.instruction)}</span>
                     )}
                   </div>
 
@@ -163,7 +170,7 @@ export default function PaperViewer() {
                           <div className="flex gap-3">
                             <span className="font-bold text-brand-dark text-sm sm:text-base">{q.questionNumber}.</span>
                             <span className="text-sm sm:text-base font-semibold text-brand-dark leading-relaxed">
-                              {q.questionText}
+                              {renderString(q.questionText)}
                             </span>
                           </div>
                           <span className="font-bold text-brand-orange text-xs sm:text-sm whitespace-nowrap">
@@ -171,18 +178,16 @@ export default function PaperViewer() {
                           </span>
                         </div>
 
-                        {/* Renders MCQ Options in a beautiful structured grid */}
                         {q.options && q.options.length > 0 && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6 mt-2">
                             {q.options.map((opt, optIdx) => (
                               <div key={optIdx} className="bg-zinc-50 border border-zinc-200/60 px-4 py-2.5 rounded-xl text-xs sm:text-sm text-brand-dark font-medium leading-none flex items-center shadow-sm select-none hover:bg-zinc-100/50 transition-colors">
-                                {opt}
+                                {renderString(opt)}
                               </div>
                             ))}
                           </div>
                         )}
 
-                        {/* Renders crisp, responsive inline SVG vector diagrams if present */}
                         {q.diagramSvg && (
                           <div className="my-4 p-4 bg-zinc-50/30 border border-brand-line-grey rounded-2xl max-w-md mx-auto flex justify-center items-center print-break-avoid overflow-hidden shadow-inner">
                             <div 
@@ -206,7 +211,7 @@ export default function PaperViewer() {
               </div>
             </div>
           ) : (
-            /* Render clean, dedicated ANSWER KEY COPY (Teacher Mode) */
+            /* Render clean, dedicated ANSWER KEY COPY */
             <div className="flex flex-col gap-8">
               {paper.answerKey && paper.answerKey.length > 0 ? (
                 <div className="flex flex-col gap-8">
@@ -249,21 +254,19 @@ export default function PaperViewer() {
                           </div>
                           
                           <p className="text-sm sm:text-base font-semibold text-brand-dark leading-relaxed mt-1">
-                            {matchedQuestion}
+                            {renderString(matchedQuestion)}
                           </p>
 
-                          {/* Options list also visible on teacher keys */}
                           {matchedOptions && matchedOptions.length > 0 && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-w-xl">
                               {matchedOptions.map((opt, optIdx) => (
                                 <div key={optIdx} className="bg-white/80 border border-zinc-200/60 px-3 py-1.5 rounded-lg text-xs text-zinc-600 font-medium">
-                                  {opt}
+                                  {renderString(opt)}
                                 </div>
                               ))}
                             </div>
                           )}
 
-                          {/* Diagrams visible on teacher keys as well */}
                           {matchedDiagram && (
                             <div className="my-2 p-2 bg-white/60 border border-brand-line-grey rounded-xl max-w-sm flex justify-center items-center">
                               <div 
@@ -281,7 +284,7 @@ export default function PaperViewer() {
                           <div className="text-xs sm:text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap font-sans">
                             {ans.answer.split('\n').map((line, idx) => (
                               <p key={idx} className="mb-1.5 last:mb-0">
-                                {line}
+                                {renderString(line)}
                               </p>
                             ))}
                           </div>

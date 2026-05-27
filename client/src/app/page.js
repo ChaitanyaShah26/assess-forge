@@ -11,14 +11,18 @@ import PaperViewer from '../components/PaperViewer';
 import MobileTabBar from '../components/MobileTabBar';
 import HomeDashboard from '../components/HomeDashboard';
 import MyGroups from '../components/MyGroups';
+import TeachersToolkit from '../components/TeachersToolkit';
+import Settings from '../components/Settings';
+import MyLibrary from '../components/MyLibrary';
 
 export default function Home() {
-  const { activeView, isGenerating, generationProgress, fetchAssignments, fetchGroups } = useAssessStore();
+  const { activeView, isGenerating, generationProgress, fetchAssignments, fetchGroups, fetchLibrary } = useAssessStore();
 
   useEffect(() => {
     fetchAssignments();
     fetchGroups();
-  }, [fetchAssignments, fetchGroups]);
+    fetchLibrary();
+  }, [fetchAssignments, fetchGroups, fetchLibrary]);
 
   const renderMainContent = () => {
     switch (activeView) {
@@ -26,6 +30,12 @@ export default function Home() {
         return <HomeDashboard />;
       case 'GROUPS':
         return <MyGroups />;
+      case 'TOOLKIT':
+        return <TeachersToolkit />;
+      case 'LIBRARY':
+        return <MyLibrary />;
+      case 'SETTINGS':
+        return <Settings />;
       case 'CREATE':
         return <CreateAssignment />;
       case 'VIEW_PAPER':

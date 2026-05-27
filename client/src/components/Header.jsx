@@ -1,21 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAssessStore } from '../store/useAssessStore';
+import { getInitials } from '../utils/getInitials';
 import { ArrowLeft, Bell, ChevronDown } from 'lucide-react';
 
 export default function Header() {
-  const { activeView, setView } = useAssessStore();
+  const { activeView, setView, teacherName } = useAssessStore();
+  const [mounted, setMounted] = useState(false);
+
+  // Sync client-side mounting state to resolve Next.js hydration mismatches
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleBack = () => {
-    // Sub-views always return to the core listing grid
     if (activeView === 'CREATE' || activeView === 'VIEW_PAPER') {
       setView('LIST');
     }
   };
 
-  // The back button is hidden on root landing views and shown only on sub-action views
   const showBackButton = activeView === 'CREATE' || activeView === 'VIEW_PAPER';
 
-  // Dynamically renders context-aware breadcrumbs matching the active scope
   const renderBreadcrumbs = () => {
     switch (activeView) {
       case 'HOME':
@@ -34,6 +38,24 @@ export default function Header() {
         return (
           <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
             Assignments
+          </span>
+        );
+      case 'TOOLKIT':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            AI Teacher's Toolkit
+          </span>
+        );
+      case 'LIBRARY':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            My Library
+          </span>
+        );
+      case 'SETTINGS':
+        return (
+          <span className="text-base font-extrabold text-brand-dark font-heading tracking-tight">
+            Portal Settings
           </span>
         );
       case 'CREATE':
@@ -78,7 +100,6 @@ export default function Header() {
   return (
     <header className="w-full max-w-[1100px] h-14 bg-white/75 backdrop-blur-md rounded-2xl px-4 lg:px-6 py-2 flex items-center justify-between shadow-sm select-none border border-gray-100/50">
       <div className="flex items-center gap-3">
-        {/* Conditional back arrow button container */}
         {showBackButton && (
           <button 
             onClick={handleBack}
@@ -88,7 +109,6 @@ export default function Header() {
           </button>
         )}
 
-        {/* Breadcrumbs node */}
         <div className="flex items-center">
           {renderBreadcrumbs()}
         </div>
@@ -100,11 +120,15 @@ export default function Header() {
           <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-brand-orange rounded-full"></div>
         </div>
 
+        {/* Dynamic User Profile */}
         <div className="flex items-center gap-2 bg-white px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer shadow-sm">
-          <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full bg-zinc-100 overflow-hidden flex items-center justify-center">
-            <span role="img" aria-label="avatar">👨‍🏫</span>
+          {/* Hydration-safe initial-based avatar */}
+          <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full bg-brand-orange text-white font-extrabold text-[10px] lg:text-xs flex items-center justify-center shrink-0 shadow-inner select-none">
+            {mounted ? getInitials(teacherName) : 'JD'}
           </div>
-          <span className="text-sm lg:text-base font-semibold text-brand-dark font-heading tracking-tight hidden sm:inline">John Doe</span>
+          <span className="text-sm lg:text-base font-semibold text-brand-dark font-heading tracking-tight hidden sm:inline">
+            {mounted ? teacherName : 'John Doe'}
+          </span>
           <ChevronDown className="w-4 h-4 text-gray-400" />
         </div>
       </div>

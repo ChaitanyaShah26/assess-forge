@@ -3,13 +3,25 @@ import { useAssessStore } from './../store/useAssessStore';
 import EmptyState from './EmptyState';
 import { Filter, Search, MoreVertical, FileText, Trash2, Eye, Calendar, Clock } from 'lucide-react';
 
+/**
+ * Defensive String Renderer.
+ * Extract strings from nested objects to prevent React rendering crashes.
+ */
+const renderString = (val) => {
+  if (!val) return '';
+  if (typeof val === 'object') {
+    return val.name || val.title || val.subjectName || val.filename || '';
+  }
+  return String(val);
+};
+
 export default function AssignmentList() {
   const { assignments, setDetailedAssignment, deleteAssignment, setView } = useAssessStore();
   
   // Filter and Search States
   const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL', 'EXAM', or 'ASSIGNMENT'
-  const [classFilter, setClassFilter] = useState('ALL'); // 'ALL' or a specific class name
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [classFilter, setClassFilter] = useState('ALL');
   
   const [activeDropdown, setActiveDropdown] = useState(null);
 
@@ -17,28 +29,25 @@ export default function AssignmentList() {
     return <EmptyState />;
   }
 
-  // Dynamically extract unique Class Levels from your existing assignments database to populate selector options
+  // Dynamically extract unique Class Levels from your existing assignments database
   const uniqueClasses = Array.from(
-    new Set(assignments.map(a => a.classLevel).filter(Boolean))
+    new Set(assignments.map(a => renderString(a.classLevel)).filter(Boolean))
   ).sort();
 
   // Multi-axis filter pipeline
   const filteredAssignments = assignments.filter((item) => {
-    // Axis 1: Text Search (Matches Subject Name, Class Level, or Assignment Title)
-    const subject = item.subjectName || '';
-    const classLevel = item.classLevel || '';
-    const title = item.assignmentTitle || '';
+    const subject = renderString(item.subjectName);
+    const classLevel = renderString(item.classLevel);
+    const title = renderString(item.assignmentTitle);
     const query = searchQuery.toLowerCase();
+    
     const matchesSearch = 
       subject.toLowerCase().includes(query) ||
       classLevel.toLowerCase().includes(query) ||
       title.toLowerCase().includes(query);
 
-    // Axis 2: Format Filter (EXAM vs ASSIGNMENT)
     const matchesType = typeFilter === 'ALL' || item.assignmentType === typeFilter;
-
-    // Axis 3: Grade/Class Level Filter
-    const matchesClass = classFilter === 'ALL' || item.classLevel === classFilter;
+    const matchesClass = classFilter === 'ALL' || renderString(item.classLevel) === classFilter;
 
     return matchesSearch && matchesType && matchesClass;
   });
@@ -50,7 +59,6 @@ export default function AssignmentList() {
 
   return (
     <div className="w-full max-w-[1100px] flex flex-col gap-6 relative select-none px-2 lg:px-0">
-      {/* Header section */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg lg:text-xl font-bold text-brand-dark font-heading">Assignments</h1>
@@ -66,7 +74,6 @@ export default function AssignmentList() {
             <span className="text-sm font-bold text-gray-400 font-heading">Filter By</span>
           </div>
 
-          {/* Selector 1: Format Toggler */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
@@ -77,7 +84,6 @@ export default function AssignmentList() {
             <option value="ASSIGNMENT">Worksheets</option>
           </select>
 
-          {/* Selector 2: Dynamic Class Level Toggler */}
           <select
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
@@ -90,7 +96,6 @@ export default function AssignmentList() {
           </select>
         </div>
 
-        {/* Compound Search Input bar */}
         <div className="w-full md:w-[250px] h-11 rounded-full border border-gray-200 px-4 flex items-center gap-2 bg-white focus-within:border-brand-orange transition-all">
           <Search className="w-5 h-5 text-gray-400" />
           <input 
@@ -137,12 +142,12 @@ export default function AssignmentList() {
                           {isExam ? 'EXAM PAPER' : 'ASSIGNMENT'}
                         </span>
                         <span className="text-xs text-zinc-400 font-semibold font-sans truncate">
-                          {item.classLevel} ({item.academicYear})
+                          {renderString(item.classLevel)} ({renderString(item.academicYear)})
                         </span>
                       </div>
                       
                       <h3 className="text-xl lg:text-2xl font-extrabold text-brand-dark font-heading leading-tight tracking-tight truncate max-w-[200px] sm:max-w-[340px]">
-                        {item.subjectName}
+                        {renderString(item.subjectName)}
                       </h3>
                     </div>
                   </div>
@@ -183,13 +188,12 @@ export default function AssignmentList() {
                   </div>
                 </div>
 
-                {/* Meta details */}
                 <div className="bg-zinc-50 p-3.5 rounded-xl border border-gray-100/50 text-xs text-zinc-500 font-sans flex flex-col gap-1.5">
                   {isExam ? (
                     <>
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-brand-orange" />
-                        <span><b>Timings:</b> {item.examTiming}</span>
+                        <span><b>Timings:</b> {renderString(item.examTiming)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-brand-orange" />
@@ -200,7 +204,7 @@ export default function AssignmentList() {
                     <>
                       <div className="flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5 text-blue-600" />
-                        <span className="truncate"><b>Title:</b> {item.assignmentTitle}</span>
+                        <span className="truncate"><b>Title:</b> {renderString(item.assignmentTitle)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-blue-600" />

@@ -2,42 +2,35 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAssessStore } from './../store/useAssessStore';
 import axios from 'axios';
 import { 
-  Plus, 
-  Minus, 
-  Cloud, 
-  Trash2, 
-  Mic, 
-  Calendar, 
-  ArrowLeft, 
-  ArrowRight,
-  FileText,
-  Clock
+  Plus, Minus, Cloud, Trash2, Mic, Calendar, ArrowLeft, ArrowRight, FileText, Clock, FolderOpen 
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function CreateAssignment() {
-  const { createAssignment, setView } = useAssessStore();
+  const { 
+    createAssignment, setView, library, fetchLibrary,
+    schoolName, schoolLocation, teacherName, defaultClass, defaultSubject, academicYear 
+  } = useAssessStore();
   
-  // New Global Header States
-  const [assignmentType, setAssignmentType] = useState('ASSIGNMENT'); // 'ASSIGNMENT' or 'EXAM'
-  const [academicYear, setAcademicYear] = useState(() => {
-    const currentYear = new Date().getFullYear();
-    return `${currentYear}-${currentYear + 1}`;
-  });
-  const [classLevel, setClassLevel] = useState('Class 12th');
-  const [subjectName, setSubjectName] = useState('Computer Science');
+  // Dynamic Initial values prefilled from local storage preferences
+  const [assignmentType, setAssignmentType] = useState('ASSIGNMENT');
+  const [year, setYear] = useState(academicYear);
+  const [classLevel, setClassLevel] = useState(defaultClass);
+  const [subjectName, setSubjectName] = useState(defaultSubject);
 
-  // Conditional Assignment Fields
-  const [assignmentTitle, setAssignmentTitle] = useState('Worksheet on Electricity');
+  const [assignmentTitle, setAssignmentTitle] = useState('Worksheet on OOP');
   const [dueDate, setDueDate] = useState('');
-
-  // Conditional Exam Fields
   const [examDate, setExamDate] = useState('');
   const [examTiming, setExamTiming] = useState('09:00 AM - 12:00 PM');
 
   const [additionalInstructions, setAdditionalInstructions] = useState('');
+  
+  // Decoupled File context selector state (Upload vs Library selector)
+  const [contextSource, setContextSource] = useState('UPLOAD'); // 'UPLOAD' or 'LIBRARY'
+  const [selectedLibraryDocId, setSelectedLibraryDocId] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
+
   const [previewText, setPreviewText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -54,35 +47,50 @@ export default function CreateAssignment() {
   const totalQuestions = configs.reduce((sum, item) => sum + item.count, 0);
   const totalMarks = configs.reduce((sum, item) => sum + (item.count * item.marksPerQuestion), 0);
 
-  // File parsing hook
+  // Initialize Library collection queries
   useEffect(() => {
-    if (!uploadedFile) {
-      setPreviewText('');
-      return;
-    }
+    fetchLibrary();
+  }, [fetchLibrary]);
 
-    const fetchFilePreview = async () => {
-      setIsParsing(true);
-      const formData = new FormData();
-      formData.append('file', uploadedFile);
-
-      try {
-        const res = await axios.post(`${API_BASE}/api/assignments/parse-preview`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        if (res.data.success) {
-          setPreviewText(res.data.extractedText);
-        }
-      } catch (err) {
-        console.error('Preview parsing failed:', err);
-        setPreviewText('Unable to preview content.');
-      } finally {
-        setIsParsing(false);
+  // File parsing effect
+  useEffect(() => {
+    if (contextSource === 'UPLOAD') {
+      if (!uploadedFile) {
+        setPreviewText('');
+        return;
       }
-    };
+      const fetchFilePreview = async () => {
+        setIsParsing(true);
+        const formData = new FormData();
+        formData.append('file', uploadedFile);
+        try {
+          const res = await axios.post(`${API_BASE}/api/assignments/parse-preview`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          if (res.data.success) setPreviewText(res.data.extractedText);
+        } catch (err) {
+          setPreviewText('Unable to preview.');
+        } finally {
+          setIsParsing(false);
+        }
+      };
+      fetchFilePreview();
+    } else {
+      // Selected from Library
+      const doc = library.find(l => l._id === selectedLibraryDocId);
+      if (doc) {
+        setPreviewText(`Using ${doc.filename} from your library as generation context.`);
+      } else {
+        setPreviewText('');
+      }
+    }
+  }, [uploadedFile, selectedLibraryDocId, contextSource, library]);
 
-    fetchFilePreview();
-  }, [uploadedFile]);
+  // File selection handler
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) setUploadedFile(file);
+  };
 
   // Voice Speech Captures
   const handleVoiceInput = () => {
@@ -95,10 +103,7 @@ export default function CreateAssignment() {
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.");
-      return;
-    }
+    if (!SpeechRecognition) return alert("Speech recognition unsupported.");
 
     try {
       const recognition = new SpeechRecognition();
@@ -138,15 +143,8 @@ export default function CreateAssignment() {
     setConfigs(configs.filter((_, i) => i !== index));
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) setUploadedFile(file);
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // Conditionally validate inputs based on selection
     if (assignmentType === 'ASSIGNMENT' && (!dueDate || !assignmentTitle)) {
       return alert('Assignment Title and Due Date are required.');
     }
@@ -156,7 +154,7 @@ export default function CreateAssignment() {
 
     const formData = new FormData();
     formData.append('assignmentType', assignmentType);
-    formData.append('academicYear', academicYear);
+    formData.append('academicYear', year);
     formData.append('classLevel', classLevel);
     formData.append('subjectName', subjectName);
     formData.append('totalQuestions', totalQuestions);
@@ -172,17 +170,18 @@ export default function CreateAssignment() {
       formData.append('examTiming', examTiming);
     }
 
-    if (uploadedFile) {
+    if (contextSource === 'UPLOAD' && uploadedFile) {
       formData.append('file', uploadedFile);
+    } else if (contextSource === 'LIBRARY' && selectedLibraryDocId) {
+      formData.append('libraryFileId', selectedLibraryDocId);
     }
 
     createAssignment(formData);
   };
 
   return (
-    <div className="w-full max-w-[810px] flex flex-col gap-6 select-none mx-auto bg-transparent relative px-2 lg:px-0">
+    <div className="w-full max-w-[810px] flex flex-col gap-6 select-none px-2 lg:px-0 relative mx-auto bg-transparent">
       
-      {/* Header section */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -210,9 +209,7 @@ export default function CreateAssignment() {
               type="button"
               onClick={() => setAssignmentType('ASSIGNMENT')}
               className={`flex-1 h-9 rounded-full flex items-center justify-center gap-2 text-sm font-semibold transition-colors focus:outline-none ${
-                assignmentType === 'ASSIGNMENT' 
-                  ? 'bg-[#181818] text-white' 
-                  : 'text-zinc-500 hover:text-brand-dark'
+                assignmentType === 'ASSIGNMENT' ? 'bg-[#181818] text-white' : 'text-zinc-500 hover:text-brand-dark'
               }`}
             >
               Assignment
@@ -221,9 +218,7 @@ export default function CreateAssignment() {
               type="button"
               onClick={() => setAssignmentType('EXAM')}
               className={`flex-1 h-9 rounded-full flex items-center justify-center gap-2 text-sm font-semibold transition-colors focus:outline-none ${
-                assignmentType === 'EXAM' 
-                  ? 'bg-[#181818] text-white' 
-                  : 'text-zinc-500 hover:text-brand-dark'
+                assignmentType === 'EXAM' ? 'bg-[#181818] text-white' : 'text-zinc-500 hover:text-brand-dark'
               }`}
             >
               Exam Paper
@@ -237,8 +232,8 @@ export default function CreateAssignment() {
             <label className="text-xs font-bold uppercase text-gray-500 font-heading">Academic Year</label>
             <input 
               type="text" 
-              value={academicYear} 
-              onChange={(e) => setAcademicYear(e.target.value)}
+              value={year} 
+              onChange={(e) => setYear(e.target.value)}
               className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading bg-white focus:outline-none focus:border-brand-orange"
             />
           </div>
@@ -264,7 +259,6 @@ export default function CreateAssignment() {
 
         {/* Conditional Inputs Block */}
         {assignmentType === 'ASSIGNMENT' ? (
-          /* ASSIGNMENT CONDITIONAL FIELDS */
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold uppercase text-gray-500 font-heading">Assignment Title</label>
@@ -289,7 +283,6 @@ export default function CreateAssignment() {
             </div>
           </div>
         ) : (
-          /* EXAM CONDITIONAL FIELDS */
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold uppercase text-gray-500 font-heading">Exam Date</label>
@@ -319,8 +312,36 @@ export default function CreateAssignment() {
           </div>
         )}
 
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-3">
+        {/* Dynamic Reference Context File Area */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <label className="text-base font-bold text-brand-dark font-heading">Reference Document Source</label>
+            
+            {/* Decoupled selector */}
+            <div className="flex items-center gap-1.5 bg-[#F0F0F0] p-1 rounded-full border border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setContextSource('UPLOAD'); setSelectedLibraryDocId(''); }}
+                className={`h-7 px-3 rounded-full flex items-center gap-1 text-xs font-semibold focus:outline-none ${
+                  contextSource === 'UPLOAD' ? 'bg-[#181818] text-white' : 'text-zinc-500 hover:text-brand-dark'
+                }`}
+              >
+                Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => { setContextSource('LIBRARY'); setUploadedFile(null); }}
+                className={`h-7 px-3 rounded-full flex items-center gap-1 text-xs font-semibold focus:outline-none ${
+                  contextSource === 'LIBRARY' ? 'bg-[#181818] text-white' : 'text-zinc-500 hover:text-brand-dark'
+                }`}
+              >
+                Select from Library
+              </button>
+            </div>
+          </div>
+
+          {contextSource === 'UPLOAD' ? (
+            /* UPLOAD CARD FILE AREA */
             <div 
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -330,13 +351,7 @@ export default function CreateAssignment() {
               }}
               className="w-full h-[202px] bg-white border border-dashed border-brand-line-grey rounded-3xl flex flex-col justify-center items-center gap-4 cursor-pointer relative hover:bg-zinc-50 transition-colors"
             >
-              <input 
-                type="file" 
-                id="file-input"
-                onChange={handleFileSelect}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                accept=".txt,.pdf"
-              />
+              <input type="file" accept=".txt,.pdf" onChange={handleFileSelect} className="absolute inset-0 opacity-0 cursor-pointer" />
               <div className="w-10 h-10 bg-[#F6F6F6] rounded-xl flex items-center justify-center">
                 <Cloud className="w-6 h-6 text-[#1E1E1E]" />
               </div>
@@ -348,183 +363,193 @@ export default function CreateAssignment() {
                   {uploadedFile ? `${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB` : 'TXT, PDF, upto 10MB'}
                 </span>
               </div>
-              {!uploadedFile && (
-                <div className="h-9 px-6 bg-[#F6F6F6] hover:bg-zinc-200 rounded-full flex items-center justify-center font-heading text-sm text-brand-dark font-semibold">
-                  Browse Files
-                </div>
-              )}
             </div>
-            <span className="text-xs lg:text-base text-zinc-500 font-medium text-center font-heading px-2">
-              Upload document coordinates of your preferred reference source material
-            </span>
-          </div>
-
-          {uploadedFile && (
-            <div className="bg-zinc-50 p-4 rounded-2xl border border-brand-line-grey flex flex-col gap-2 transition-all">
-              <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wide">
-                <span className="flex items-center gap-1">
-                  <FileText className="w-4 h-4 text-brand-orange" />
-                  Source Text Preview Block
-                </span>
-                <span>{isParsing ? 'Parsing Content...' : 'Parsed successfully'}</span>
+          ) : (
+            /* MY LIBRARY FILE SELECTOR DROPDOWN */
+            <div className="w-full h-[120px] bg-white rounded-3xl border border-brand-line-grey p-6 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 w-full max-w-sm">
+                <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
+                  <FolderOpen className="w-5 h-5 text-brand-orange" />
+                </div>
+                <select
+                  value={selectedLibraryDocId}
+                  onChange={(e) => setSelectedLibraryDocId(e.target.value)}
+                  className="w-full h-11 border border-brand-line-grey rounded-full px-4 text-sm font-heading focus:outline-none bg-white"
+                >
+                  <option value="">-- Choose from your Library Document Vault --</option>
+                  {library.map(l => (
+                    <option key={l._id} value={l._id}>
+                      {l.filename} ({(l.size / (1024 * 1024)).toFixed(2)} MB)
+                    </option>
+                  ))}
+                </select>
               </div>
-              {isParsing ? (
-                <div className="h-16 flex items-center justify-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce"></div>
-                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce [animation-delay:0.2s]"></div>
-                  <div className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce [animation-delay:0.4s]"></div>
-                </div>
-              ) : (
-                <div className="text-xs text-zinc-600 font-mono bg-white p-3 rounded-lg border border-gray-100 max-h-24 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                  {previewText || 'No plain text found inside uploaded material.'}
-                </div>
+              {library.length === 0 && (
+                <span className="text-xs text-red-500 font-medium italic">
+                  * Your Library is empty. Upload documents inside My Library tab first.
+                </span>
               )}
             </div>
           )}
 
-          <div className="flex flex-col lg:flex-row justify-between items-start gap-6 lg:gap-12">
-            <div className="w-full flex-1 flex flex-col gap-4">
-              <label className="text-base font-bold text-brand-dark font-heading">Question Type</label>
-              
+          {/* Document Content Previews */}
+          {previewText && (
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-brand-line-grey flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  <FileText className="w-4 h-4 text-brand-orange" />
+                  Reference Text Preview
+                </span>
+                <span>{isParsing ? 'Parsing Content...' : 'Read successfully'}</span>
+              </div>
+              <div className="text-xs text-zinc-600 font-mono bg-white p-3 rounded-lg border border-gray-100 max-h-24 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                {previewText}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-6 lg:gap-12">
+          <div className="w-full flex-1 flex flex-col gap-4">
+            <label className="text-base font-bold text-brand-dark font-heading">Question Type</label>
+            <div className="flex flex-col gap-3">
+              {configs.map((cfg, index) => (
+                <div key={index} className="flex items-center gap-2 h-11">
+                  <div className="flex-1 bg-white h-full border border-brand-line-grey rounded-full px-4 flex items-center justify-between shadow-sm">
+                    <input 
+                      type="text" 
+                      value={cfg.type}
+                      onChange={(e) => {
+                        const updated = [...configs];
+                        updated[index].type = e.target.value;
+                        setConfigs(updated);
+                      }}
+                      className="text-xs lg:text-sm font-semibold text-brand-dark bg-transparent focus:outline-none font-heading w-full"
+                    />
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => removeConfigType(index)}
+                    className="w-11 h-11 bg-white hover:bg-red-50 border border-brand-line-grey rounded-full flex items-center justify-center transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              type="button"
+              onClick={addConfigType}
+              className="flex items-center gap-2 mt-2 h-9"
+            >
+              <div className="w-9 h-9 bg-brand-dark rounded-full flex items-center justify-center">
+                <Plus className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold text-sm text-brand-dark font-heading">Add Question Type</span>
+            </button>
+          </div>
+
+          <div className="w-full lg:w-auto flex gap-4 justify-between lg:justify-start">
+            <div className="flex flex-col gap-4 items-center">
+              <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">No. of Questions</span>
               <div className="flex flex-col gap-3">
                 {configs.map((cfg, index) => (
-                  <div key={index} className="flex items-center gap-2 h-11">
-                    <div className="flex-1 bg-white h-full border border-brand-line-grey rounded-full px-4 flex items-center justify-between shadow-sm">
-                      <input 
-                        type="text" 
-                        value={cfg.type}
-                        onChange={(e) => {
-                          const updated = [...configs];
-                          updated[index].type = e.target.value;
-                          setConfigs(updated);
-                        }}
-                        className="text-xs lg:text-sm font-semibold text-brand-dark bg-transparent focus:outline-none font-heading w-full"
-                      />
-                    </div>
+                  <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
                     <button 
                       type="button"
-                      onClick={() => removeConfigType(index)}
-                      className="w-11 h-11 bg-white hover:bg-red-50 border border-brand-line-grey rounded-full flex items-center justify-center transition-colors"
+                      onClick={() => updateCount(index, -1)}
+                      className="text-gray-400 font-extrabold focus:outline-none"
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <Minus className="w-4 h-4 text-brand-line-grey" />
+                    </button>
+                    <input 
+                      type="number"
+                      value={cfg.count}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        const updated = [...configs];
+                        updated[index].count = isNaN(val) ? 0 : Math.max(0, val);
+                        setConfigs(updated);
+                      }}
+                      className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => updateCount(index, 1)}
+                      className="text-gray-400 font-extrabold focus:outline-none"
+                    >
+                      <Plus className="w-4 h-4 text-gray-500" />
                     </button>
                   </div>
                 ))}
               </div>
+            </div>
 
-              <button 
+            <div className="flex flex-col gap-4 items-center">
+              <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">Marks</span>
+              <div className="flex flex-col gap-3">
+                {configs.map((cfg, index) => (
+                  <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
+                    <button 
+                      type="button"
+                      onClick={() => updateMarks(index, -1)}
+                      className="text-brand-line-grey focus:outline-none"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <input 
+                      type="number"
+                      value={cfg.marksPerQuestion}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        const updated = [...configs];
+                        updated[index].marksPerQuestion = isNaN(val) ? 0 : Math.max(0, val);
+                        setConfigs(updated);
+                      }}
+                      className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => updateMarks(index, 1)}
+                      className="text-gray-500 focus:outline-none"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end gap-1 w-full border-t border-brand-line-grey pt-4 text-sm lg:text-base">
+          <span className="font-semibold text-brand-dark font-heading">Total Questions : {totalQuestions}</span>
+          <span className="font-semibold text-brand-dark font-heading">Total Marks : {totalMarks}</span>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-base font-bold text-brand-dark font-heading">Additional Information (For better output)</label>
+          <div className="w-full h-[102px] rounded-2xl border border-brand-line-grey bg-white p-4 flex flex-col justify-between">
+            <textarea 
+              rows="2"
+              placeholder="e.g Generate a question paper for 3 hour exam duration..."
+              value={additionalInstructions}
+              onChange={(e) => setAdditionalInstructions(e.target.value)}
+              className="w-full text-xs lg:text-sm text-zinc-500 bg-transparent focus:outline-none font-heading resize-none"
+            />
+            <div className="flex justify-end">
+              <button
                 type="button"
-                onClick={addConfigType}
-                className="flex items-center gap-2 mt-2 h-9"
+                onClick={handleVoiceInput}
+                className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-mic border transition-all duration-200 focus:outline-none ${
+                  isListening 
+                    ? 'bg-brand-orange text-white border-brand-orange animate-pulse scale-105' 
+                    : 'bg-zinc-100 text-brand-dark hover:bg-zinc-200 border-transparent'
+                }`}
               >
-                <div className="w-9 h-9 bg-brand-dark rounded-full flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-white" />
-                </div>
-                <span className="font-bold text-sm text-brand-dark font-heading">Add Question Type</span>
+                <Mic className="w-4 h-4" />
               </button>
-            </div>
-
-            <div className="w-full lg:w-auto flex gap-4 justify-between lg:justify-start">
-              <div className="flex flex-col gap-4 items-center">
-                <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">No. of Questions</span>
-                <div className="flex flex-col gap-3">
-                  {configs.map((cfg, index) => (
-                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
-                      <button 
-                        type="button"
-                        onClick={() => updateCount(index, -1)}
-                        className="text-gray-400 font-extrabold focus:outline-none"
-                      >
-                        <Minus className="w-4 h-4 text-brand-line-grey" />
-                      </button>
-                      <input 
-                        type="number"
-                        value={cfg.count}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          const updated = [...configs];
-                          updated[index].count = isNaN(val) ? 0 : Math.max(0, val);
-                          setConfigs(updated);
-                        }}
-                        className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => updateCount(index, 1)}
-                        className="text-gray-400 font-extrabold focus:outline-none"
-                      >
-                        <Plus className="w-4 h-4 text-gray-500" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4 items-center">
-                <span className="text-xs lg:text-base font-medium text-brand-dark font-heading">Marks</span>
-                <div className="flex flex-col gap-3">
-                  {configs.map((cfg, index) => (
-                    <div key={index} className="w-[100px] lg:w-[120px] h-11 bg-white rounded-full border border-brand-line-grey shadow-sm flex items-center justify-between px-3 focus-within:border-brand-orange transition-all">
-                      <button 
-                        type="button"
-                        onClick={() => updateMarks(index, -1)}
-                        className="text-brand-line-grey focus:outline-none"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <input 
-                        type="number"
-                        value={cfg.marksPerQuestion}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          const updated = [...configs];
-                          updated[index].marksPerQuestion = isNaN(val) ? 0 : Math.max(0, val);
-                          setConfigs(updated);
-                        }}
-                        className="w-10 lg:w-12 text-center bg-transparent focus:outline-none font-heading text-sm lg:text-base font-semibold text-brand-dark [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => updateMarks(index, 1)}
-                        className="text-gray-500 focus:outline-none"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 w-full border-t border-brand-line-grey pt-4 text-sm lg:text-base">
-            <span className="font-semibold text-brand-dark font-heading">Total Questions : {totalQuestions}</span>
-            <span className="font-semibold text-brand-dark font-heading">Total Marks : {totalMarks}</span>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-base font-bold text-brand-dark font-heading">Additional Information (For better output)</label>
-            <div className="w-full h-[102px] rounded-2xl border border-brand-line-grey bg-white p-4 flex flex-col justify-between">
-              <textarea 
-                rows="2"
-                placeholder="e.g Generate a question paper for 3 hour exam duration..."
-                value={additionalInstructions}
-                onChange={(e) => setAdditionalInstructions(e.target.value)}
-                className="w-full text-xs lg:text-sm text-zinc-500 bg-transparent focus:outline-none font-heading resize-none"
-              />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleVoiceInput}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-mic border transition-all duration-200 focus:outline-none ${
-                    isListening 
-                      ? 'bg-brand-orange text-white border-brand-orange animate-pulse scale-105' 
-                      : 'bg-zinc-100 text-brand-dark hover:bg-zinc-200 border-transparent'
-                  }`}
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
         </div>
