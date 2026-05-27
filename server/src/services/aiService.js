@@ -7,9 +7,13 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 const MISTRAL_MODEL = process.env.MISTRAL_MODEL || 'mistral-large-latest';
 
 if (!MISTRAL_API_KEY) {
-  console.warn('WARNING: MISTRAL_API_KEY is missing. AI generation will fail until it is added.');
+  console.warn('WARNING: MISTRAL_API_KEY is missing on server configuration.');
 }
 
+/**
+ * Defensive string sanitizer to clean up LLM markdown blocks and trailing commas.
+ * Structural newlines are kept intact to prevent JSON corruption.
+ */
 const sanitizeJSONString = (raw) => {
   let cleaned = raw.trim();
   if (cleaned.startsWith('```json')) {
@@ -25,6 +29,10 @@ const sanitizeJSONString = (raw) => {
   return cleaned;
 };
 
+/**
+ * Queries Mistral AI to build a structured, self-repairing question paper.
+ * Optimized with extreme compactness rules to prevent free-tier API truncation.
+ */
 export const generateAssessmentPaper = async (params) => {
   const {
     configs,
@@ -59,38 +67,32 @@ export const generateAssessmentPaper = async (params) => {
     : `You MUST format the "title" field exactly like this: "Delhi Public School, Sector-4, Bokaro\\nAssignment: ${assignmentTitle}"
        Set the "timeAllowed" field exactly to: "Due Date: ${dueFormatted}"`;
 
-  const systemPrompt = `You are an expert curriculum designer and academic evaluation builder.
-Your task is to generate a comprehensive, structured exam assessment paper based on provided configurations.
+  // SYSTEM PROMPT: Enforces extreme compactness rules to protect against free-tier load shedding
+  const systemPrompt = `You are an expert curriculum designer.
+Your task is to generate a structured exam paper based on provided configurations.
 
-CRITICAL COMPACTNESS RULE:
-- Be concise. Keep your "questionText" and "answer" explanations brief, precise, and focused (under 2 sentences each). This is critical to ensure the output fits completely within the context constraints and avoids token truncation.
+CRITICAL COMPACTNESS & TOKEN-SAVING RULES:
+1. Be extremely brief. Keep "questionText" simple and under 15 words.
+2. Keep each "answer" inside the "answerKey" strictly to a single, concise sentence of maximum 12 words. Do not write detailed explanations, marking schemes, or filler text. This is mandatory to prevent API generation timeouts.
+3. Keep visual "diagramSvg" elements extremely simple, using basic lines and minimal nodes.
 
 CRITICAL JSON SYNTAX & HEADER RULES:
 1. You MUST return your output in strict JSON format matching the schema details.
 2. ${documentHeaderRule}
 3. Set the "subject" field to: "${subjectName}"
 4. Set the "class" field to: "${classLevel}"
-5. Under no circumstances should you write raw, unescaped double-quotes (") inside a JSON string value. If you need to quote a term inside a sentence, you MUST use single quotes (') instead.
-6. You MUST escape all backslashes as '\\\\' inside your string values (especially inside LaTeX formulas, math, or paths).
+5. Under no circumstances should you write raw, unescaped double-quotes (") inside a JSON string value. Use single quotes (') instead.
+6. You MUST escape all backslashes as '\\\\' inside your string values.
 7. Make sure all paragraph breaks inside string values are properly escaped as '\\n'.
 8. Do not include trailing commas in your JSON structure.
 9. Do not write any conversational text before or after the JSON block.
-
-CRITICAL MCQ & DIAGRAM FORMATTING RULES:
-1. If a section contains 'Multiple Choice Questions' (MCQs), each question object in that section MUST contain an 'options' array containing exactly 4 choices. Each option string inside the array MUST be prefixed with 'A) ', 'B) ', 'C) ', 'D) '.
-2. If a section contains 'Diagram/Graph-Based Questions' or 'Numerical Problems' that require visual context, you MUST generate a valid, responsive, well-formed inline SVG XML string representing that context, and set it under the 'diagramSvg' key of that question object.
-3. The SVG string MUST:
-   - Use 'viewBox="0 0 400 200" width="100%" height="150"' and be completely fluid.
-   - Be simple and lightweight to save tokens. Use stroke="#303030" or "black" for lines, circles, and borders, and fill="none".
-   - Contain clean, clear <text> labels in a standard sans-serif font for coordinates, electrical nodes, forces, or shapes.
-   - Be raw XML embedded inside the JSON string value. Do NOT write markdown tick blocks inside string values.
 
 CORE EXAM RULES:
 1. You MUST generate exactly the requested number of questions of each type.
 2. The total sum of all questions across sections must equal exactly ${totalQuestions}.
 3. The total marks of all questions must sum up to exactly ${totalMarks}.
 4. Map each requested "question type" into its own logical section (e.g. Section A: Multiple Choice Questions, Section B: Short Questions, etc.).
-5. For difficulty, assign each question one of these strict values: "Easy", "Moderate", or "Challenging".
+5. For difficulty, assign each question one of these values: "Easy", "Moderate", or "Challenging".
 
 REQUIRED SCHEMA SPECIFICATION:
 {
@@ -101,8 +103,8 @@ REQUIRED SCHEMA SPECIFICATION:
   "maxMarks": ${totalMarks},
   "sections": [
     {
-      "sectionName": "Section A: Multiple Choice Questions",
-      "instruction": "Attempt all questions in this section. Select the single best option.",
+      "sectionName": "Section A",
+      "instruction": "Attempt all questions.",
       "questions": [
         {
           "questionNumber": 1,
@@ -118,7 +120,7 @@ REQUIRED SCHEMA SPECIFICATION:
   "answerKey": [
     {
       "questionNumber": 1,
-      "answer": "C) Ampere. The standard SI unit of electric current is the Ampere."
+      "answer": "C) Ampere. The SI unit of current."
     }
   ]
 }`;
@@ -155,7 +157,7 @@ Generate and populate the output matching the schema rules completely. Ensure th
         ],
         response_format: { type: 'json_object' }, // Forces JSON Mode output
         temperature: 0.1, // Lower temp for more deterministic outputs
-        max_tokens: 2500 // CRITICAL OPTIMIZATION: Keeps limits compatible with free-tier model context limits
+        max_tokens: 2500 // Keeps limits compatible with free-tier model context limits
       })
     });
 
@@ -172,6 +174,7 @@ Generate and populate the output matching the schema rules completely. Ensure th
       const repairedContent = jsonrepair(cleanedContent);
       const parsedData = JSON.parse(repairedContent);
 
+      // Validate root schema components are present
       if (!parsedData.sections || !parsedData.answerKey || !parsedData.title) {
         throw new Error('LLM output parsed successfully but lacks required schema fields.');
       }

@@ -8,24 +8,27 @@ import { addAssignmentJob } from '../queue/assessmentQueue.js';
 
 const router = express.Router();
 const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
+const pdfModule = require('pdf-parse'); // Dynamic version loader
 
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage,
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+/**
+ * Universal PDF Text Extractor Helper.
+ * Handles both v1 (function) and v2 (PDFParse class) variants seamlessly.
+ */
 const parsePDFBuffer = async (buffer) => {
   if (typeof pdfModule === 'function') {
     const data = await pdfModule(buffer);
     return data.text;
   }
-  
   if (pdfModule && typeof pdfModule.default === 'function') {
     const data = await pdfModule.default(buffer);
     return data.text;
   }
-  
   if (pdfModule && typeof pdfModule.PDFParse === 'function') {
     const parser = new pdfModule.PDFParse({ data: buffer });
     const result = await parser.getText();
@@ -34,43 +37,17 @@ const parsePDFBuffer = async (buffer) => {
     }
     return result.text;
   }
-
   throw new Error('Unsupported pdf-parse library structure or version.');
 };
 
+/* ==========================================================================
+   1. STATIC SUB-ROUTES (Must be defined first to prevent parameter hijacking)
+   ========================================================================== */
 
-router.get('/dashboard-metrics', async (req, res) => {
-  try {
-    const assignmentsCount = await Assignment.countDocuments({ assignmentType: 'ASSIGNMENT' });
-    const examsCount = await Assignment.countDocuments({ assignmentType: 'EXAM' });
-    const totalCreated = assignmentsCount + examsCount;
-
-    const groups = await ClassGroup.find();
-    
-    const totalStudents = groups.reduce((sum, g) => {
-      const count = g.students ? g.students.length : 0;
-      return sum + count;
-    }, 0);
-
-    const recentActivity = await Assignment.find()
-      .populate({ path: 'fileId', select: '-data' })
-      .sort({ createdAt: -1 })
-      .limit(4);
-
-    return res.json({
-      totalCreated,
-      assignmentsCount,
-      examsCount,
-      totalStudents,
-      totalGroups: groups.length,
-      recentActivity
-    });
-  } catch (error) {
-    console.error('Error generating aggregate dashboard metrics:', error);
-    return res.status(500).json({ error: 'Internal aggregation pipeline failure.' });
-  }
-});
-
+/**
+ * POST /api/assignments/parse-preview
+ * Direct in-memory buffer parsing.
+ */
 router.post('/parse-preview', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
@@ -104,6 +81,144 @@ router.post('/parse-preview', upload.single('file'), async (req, res) => {
   }
 });
 
+/**
+ * GET /api/assignments/dashboard-metrics
+ * Aggregates real-time statistics from MongoDB collections.
+ */
+router.get('/dashboard-metrics', async (req, res) => {
+  try {
+    const assignmentsCount = await Assignment.countDocuments({ assignmentType: 'ASSIGNMENT' });
+    const examsCount = await Assignment.countDocuments({ assignmentType: 'EXAM' });
+    const totalCreated = assignmentsCount + examsCount;
+
+    const groups = await ClassGroup.find();
+    const totalStudents = groups.reduce((sum, g) => {
+      const count = g.students ? g.students.length : 0;
+      return sum + count;
+    }, 0);
+
+    const recentActivity = await Assignment.find()
+      .populate({ path: 'fileId', select: '-data' })
+      .sort({ createdAt: -1 })
+      .limit(4);
+
+    return res.json({
+      totalCreated,
+      assignmentsCount,
+      examsCount,
+      totalStudents,
+      totalGroups: groups.length,
+      recentActivity
+    });
+  } catch (error) {
+    console.error('Error generating aggregate dashboard metrics:', error);
+    return res.status(500).json({ error: 'Internal aggregation pipeline failure.' });
+  }
+});
+
+/**
+ * GET /api/assignments/library
+ * Lists all documents uploaded into the My Library repository.
+ */
+router.get('/library', async (req, res) => {
+  try {
+    const libraryFiles = await Upload.find({ isLibraryFile: true })
+      .select('-data')
+      .sort({ createdAt: -1 });
+    return res.json(libraryFiles);
+  } catch (error) {
+    console.error('Failed to query library:', error);
+    return res.status(500).json({ error: 'Internal server query failure.' });
+  }
+});
+
+/**
+ * POST /api/assignments/library
+ * Uploads a document directly to the My Library vault.
+ */
+router.post('/library', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded.' });
+    }
+
+    const newLibraryDoc = new Upload({
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      data: req.file.buffer,
+      isLibraryFile: true
+    });
+
+    const savedDoc = await newLibraryDoc.save();
+    
+    const responseDoc = savedDoc.toObject();
+    delete responseDoc.data;
+
+    return res.status(201).json(responseDoc);
+  } catch (error) {
+    console.error('Failed to save library document:', error);
+    return res.status(500).json({ error: 'Internal server insertion failure.' });
+  }
+});
+
+/**
+ * GET /api/assignments/library/:id/text
+ * RESOLVED: Retrieves and parses the actual text of a specific library document.
+ * Placed above dynamic parameters to prevent route hijacking.
+ */
+router.get('/library/:id/text', async (req, res) => {
+  try {
+    const upload = await Upload.findById(req.params.id);
+    if (!upload) {
+      return res.status(404).json({ error: 'Library document not found.' });
+    }
+
+    let extractedText = '';
+    if (upload.mimetype === 'text/plain') {
+      extractedText = upload.data.toString('utf-8');
+    } else if (upload.mimetype === 'application/pdf') {
+      try {
+        extractedText = await parsePDFBuffer(upload.data);
+      } catch (pdfErr) {
+        console.error('Failed parsing library PDF binary stream:', pdfErr);
+        return res.status(500).json({ error: 'Failed to extract text from PDF document.' });
+      }
+    } else {
+      extractedText = upload.data.toString('utf-8');
+    }
+
+    return res.json({ success: true, text: extractedText });
+  } catch (error) {
+    console.error('Failed to retrieve library file text:', error);
+    return res.status(500).json({ error: 'Internal server query error.' });
+  }
+});
+
+/**
+ * DELETE /api/assignments/library/:id
+ * Deletes a document from the My Library repository.
+ */
+router.delete('/library/:id', async (req, res) => {
+  try {
+    const deleted = await Upload.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+    return res.json({ success: true, message: 'Library document successfully deleted.' });
+  } catch (error) {
+    console.error('Failed to delete library document:', error);
+    return res.status(500).json({ error: 'Internal server deletion failure.' });
+  }
+});
+
+/* ==========================================================================
+   2. GENERAL ROUTING ENDPOINTS
+   ========================================================================== */
+
+/**
+ * POST /api/assignments
+ */
 router.post('/', upload.single('file'), async (req, res) => {
   try {
     const { 
@@ -118,7 +233,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       configs, 
       totalQuestions, 
       totalMarks, 
-      additionalInstructions 
+      additionalInstructions,
+      libraryFileId
     } = req.body;
 
     if (!assignmentType || !academicYear || !classLevel || !subjectName || !totalQuestions || !totalMarks) {
@@ -143,6 +259,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       });
       const savedUpload = await newUpload.save();
       fileId = savedUpload._id;
+    } else if (libraryFileId && libraryFileId !== 'undefined' && libraryFileId !== '') {
+      fileId = libraryFileId;
     }
 
     let parsedConfigs = [];
@@ -186,6 +304,9 @@ router.post('/', upload.single('file'), async (req, res) => {
   }
 });
 
+/**
+ * GET /api/assignments
+ */
 router.get('/', async (req, res) => {
   try {
     const assignments = await Assignment.find()
@@ -199,6 +320,13 @@ router.get('/', async (req, res) => {
   }
 });
 
+/* ==========================================================================
+   3. DYNAMIC DUAL-VERB PARAMETER WILDCARDS (Must be defined last)
+   ========================================================================== */
+
+/**
+ * GET /api/assignments/:id
+ */
 router.get('/:id', async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id)
@@ -215,6 +343,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/assignments/:id
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id);

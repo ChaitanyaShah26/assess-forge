@@ -18,6 +18,10 @@ const uploadSchema = new mongoose.Schema(
     data: {
       type: Buffer, 
       required: true
+    },
+    isLibraryFile: {
+      type: Boolean,
+      default: false 
     }
   },
   { 
